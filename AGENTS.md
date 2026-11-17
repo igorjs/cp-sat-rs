@@ -42,4 +42,4 @@ A Rust port of the CP-SAT solver from Google OR-Tools, at commit `c931f5f778c880
 
 - On a local machine, agents run cargo with `-j 4`.
 - Run one solve at a time.
-- GitHub Actions cannot start jobs for now. Run `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and `cargo test --workspace --release` locally before a merge.
+- Before a push, run `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and `cargo test --workspace --release` locally. A merge needs every CI job green.
