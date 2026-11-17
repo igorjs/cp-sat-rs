@@ -64,7 +64,8 @@ jobs:
           toolchain: "1.88"
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - if: hashFiles('crates/*/Cargo.toml', 'xtask/Cargo.toml') != ''
-        run: cargo build --workspace
+        # rust-toolchain.toml overrides the default, so name the toolchain.
+        run: cargo +1.88 build --workspace
 
   deny:
     runs-on: ubuntu-latest
@@ -82,7 +83,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: stable
-          components: llvm-tools-preview
+      # The active toolchain is the one rust-toolchain.toml pins.
+      - run: rustup component add llvm-tools-preview
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-llvm-cov
