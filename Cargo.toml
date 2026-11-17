@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = []
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.88"
+license = "Apache-2.0"
+
+[profile.release]
+overflow-checks = true

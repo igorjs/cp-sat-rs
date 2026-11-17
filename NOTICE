@@ -1,0 +1,13 @@
+cp-sat-rs
+Copyright 2026 Igor Santos
+
+This project is a Rust port of the CP-SAT solver from Google OR-Tools
+(https://github.com/google/or-tools), at commit
+c931f5f778c88050a3f71d72dfc30d3d020aa821.
+
+The original code is Copyright Google LLC and is licensed under the Apache
+License, Version 2.0. See LICENSE.
+
+Changes: the code is translated from C++ to Rust. Each ported file keeps the
+upstream Apache 2.0 header and a line that names the upstream file, the
+upstream commit and the change.
