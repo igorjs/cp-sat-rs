@@ -5,6 +5,9 @@
 # bytes for the same commit, so on a mismatch the script fetches the commit
 # with git and accepts it when its tree hash matches the lock.
 #
+# The last step, on every path, checks that the proto files committed under
+# crates/proto/proto are byte for byte the ones in the fetched source.
+#
 # Environment:
 #   UPSTREAM_LOCK  lock file to read (default: upstream.lock in the repo root)
 #   UPSTREAM_DIR   target directory (default: upstream/ in the repo root)
@@ -14,6 +17,11 @@ readonly DOWNLOAD_RETRIES=5
 readonly DOWNLOAD_RETRY_DELAY_SECONDS=5
 readonly DOWNLOAD_MAX_SECONDS=600
 readonly STAMP_NAME=.commit
+readonly COMMITTED_PROTO_DIR=crates/proto/proto
+readonly COMMITTED_PROTOS=(
+  ortools/sat/cp_model.proto
+  ortools/sat/sat_parameters.proto
+)
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 lock_file="${UPSTREAM_LOCK:-$repo_root/upstream.lock}"
@@ -108,6 +116,19 @@ fetch_git() {
   git -C "$clone" archive --format=tar FETCH_HEAD | tar -xf - -C "$dest"
 }
 
+# Fails when a committed proto file differs from the same file in the source.
+check_committed_protos() {
+  local proto differs=0
+  for proto in "${COMMITTED_PROTOS[@]}"; do
+    if ! cmp -s "$repo_root/$COMMITTED_PROTO_DIR/$proto" "$target_dir/$proto"; then
+      log "$COMMITTED_PROTO_DIR/$proto differs from $target_dir/$proto"
+      differs=1
+    fi
+  done
+  [[ "$differs" -eq 0 ]] || fail "committed proto files differ from the fetched source"
+  log "committed proto files match the fetched source"
+}
+
 [[ -f "$lock_file" ]] || fail "lock file $lock_file does not exist"
 repo="$(lock_value repo)"
 commit="$(lock_value commit)"
@@ -117,6 +138,7 @@ tree="$(lock_value tree)"
 
 if stamp_matches; then
   log "$target_dir already holds $commit, nothing to do"
+  check_committed_protos
   exit 0
 fi
 
@@ -140,3 +162,4 @@ stamp_text "$commit" "$verified" >"$staged/$STAMP_NAME"
 rm -rf "$target_dir"
 mv "$staged" "$target_dir"
 log "$target_dir now holds $commit ($verified)"
+check_committed_protos
