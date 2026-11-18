@@ -433,7 +433,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | util | `util/return_macros.h` | 35 | none | - | - | 0 | - | todo |
 | util | `util/rev.h` | 317 | `util/rev_test.cc` | 8 | `base/strong_vector.h` | 2 | - | todo |
 | util | `util/running_stat.h` | 207 | `util/running_stat_test.cc` | 9 | - | 0 | - | todo |
-| util | `util/saturated_arithmetic.h` | 298 | `util/saturated_arithmetic_test.cc` | 17 | `base/types.h`, `util/bitset.h` | 1 | 0 | todo |
+| util | `util/saturated_arithmetic.h` | 298 | `util/saturated_arithmetic_test.cc` | 17 | `base/types.h`, `util/bitset.h` | 1 | 0 | done |
 | util | `util/scheduling.h` | 390 | `util/scheduling_test.cc` | 5 | - | 0 | - | todo |
 | util | `util/sigint.cc` | 77 | none | - | `base/macros/os_support.h`, `util/sigint.h` | 3 | - | todo |
 | util | `util/sigint.h` | 63 | none | - | `base/macros/os_support.h` | 2 | - | todo |

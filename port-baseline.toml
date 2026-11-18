@@ -51,3 +51,16 @@ reason = "checks that a successful parse empties the error string, as upstream w
 [[file.added]]
 name = "debug_string_of_a_negative_zero_double_differs_from_the_reference"
 reason = "pins the known difference: prost drops a double that is -0.0 when it encodes, so the size and text miss the field"
+
+# The macro test_binary_operator makes 9 of the 17 cases, one for each use. safe_add_into takes
+# a strong integer through the trait StrongInt64, so the case runs before strong_integers is ported.
+[[file]]
+upstream = "util/saturated_arithmetic_test.cc"
+rust = "crates/util/src/saturated_arithmetic.rs"
+binary = "cpsat_util"
+module = "saturated_arithmetic::tests"
+upstream_cases = 17
+
+[[file.added]]
+name = "cap_functions_equal_the_clamped_i128_result"
+reason = "property test: cap_add, cap_sub and cap_prod equal the i128 result clamped to the i64 range, on random and corner pairs"

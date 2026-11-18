@@ -252,3 +252,28 @@ TEST(ClosedIntervalConstructorTest, DFatalInNonOptIfStartGreaterThanEnd) {   // 
 #[test]
 fn closed_interval_constructor_test_d_fatal_in_non_opt_if_start_greater_than_end() {
 ```
+
+## 16. Templates over strong integer types
+
+A C++ template that takes a strong integer type (`IntegerType` with `value()`) is a generic function bounded by a trait of the file that needs it. A strong type implements the trait, and a test defines its own type for it. This stays until `crates/util/src/strong_integers.rs` is ported.
+
+```cpp
+template <typename IntegerType>
+bool SafeAddInto(IntegerType a, IntegerType* b);   // util/saturated_arithmetic.h:117
+```
+
+```rust
+pub fn safe_add_into<T: StrongInt64>(a: T, b: &mut T) -> bool {
+```
+
+## 17. Overloads and templates on primitive types
+
+A C++ function template that is specialised on primitive types, or an overload set, is a trait implemented for each type, with a free function that calls it.
+
+```cpp
+template <typename T> T CapOrFloatAdd(T x, T y);   // util/saturated_arithmetic.h:233
+```
+
+```rust
+pub fn cap_or_float_add<T: CapOrFloatAdd>(x: T, y: T) -> T {
+```
