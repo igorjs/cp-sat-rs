@@ -11,3 +11,4 @@ name = "cpsat_util"
 
 [dev-dependencies]
 rand_chacha.workspace = true
+cpsat-testutil = { path = "../testutil" }
