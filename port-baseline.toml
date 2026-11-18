@@ -76,6 +76,14 @@ upstream_cases = 38
 typed_additions = 18
 debug_only = 3
 
+[[file.added]]
+name = "sparse_bitset_set_unsafe_sets_the_bit_and_records_it_for_clearing"
+reason = "upstream has no test for SparseBitset::SetUnsafe; checks that the bit is set and that reset_all_to_false clears it"
+
+[[file.added]]
+name = "bitset64_over_a_type_of_each_strong_macro_sets_and_iterates"
+reason = "upstream has no test of its own for the BitsetIndex impls the strong type macros emit; builds a Bitset64 over a type of each macro"
+
 # util/strong_integers has no upstream test file, so every test here is an added test.
 [[file]]
 upstream = "util/strong_integers.h"

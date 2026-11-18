@@ -221,6 +221,15 @@ macro_rules! define_strong_index_type {
     ($(#[$meta:meta])* $vis:vis $name:ident) => {
         $crate::strong_type_common!($(#[$meta])* $vis $name, i32);
 
+        impl $crate::bitset::BitsetIndex for $name {
+            fn value_as_u64(self) -> u64 {
+                self.0 as i64 as u64
+            }
+            fn from_u64(value: u64) -> $name {
+                $name(value as i32)
+            }
+        }
+
         $crate::strong_assignment_op!($name, i32, AddAssign, add_assign, +=);
         $crate::strong_assignment_op!($name, i32, SubAssign, sub_assign, -=);
 
@@ -263,6 +272,15 @@ macro_rules! define_strong_int64_type {
             }
             fn from_value(value: i64) -> $name {
                 $name(value)
+            }
+        }
+
+        impl $crate::bitset::BitsetIndex for $name {
+            fn value_as_u64(self) -> u64 {
+                self.0 as u64
+            }
+            fn from_u64(value: u64) -> $name {
+                $name(value as i64)
             }
         }
 

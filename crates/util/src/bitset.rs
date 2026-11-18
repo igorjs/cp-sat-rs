@@ -21,8 +21,6 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::ops::Index;
 
-use crate::saturated_arithmetic::StrongInt64;
-
 // Basic bit operations
 
 /// Useful constants: word and double word will all bits set.
@@ -445,15 +443,6 @@ macro_rules! impl_bitset_index_for_integer {
 
 impl_bitset_index_for_integer!(i32, i64, usize);
 
-impl<T: StrongInt64 + PartialOrd + Debug> BitsetIndex for T {
-    fn value_as_u64(self) -> u64 {
-        self.value() as u64
-    }
-    fn from_u64(value: u64) -> Self {
-        T::from_value(value as i64)
-    }
-}
-
 // Stores `size` and checks `0 <= index < size` in debug builds; empty in release builds so
 // a view stays as small as its bucket slice.
 #[cfg(debug_assertions)]
@@ -487,6 +476,13 @@ impl<I: BitsetIndex> BoundsChecker<I> {
     fn check(&self, _index: I) {}
 }
 
+/// The bucket storage a view reads, which depends on its access.
+pub trait ViewAccess {
+    type Buckets<'a>: Copy;
+
+    fn load(buckets: Self::Buckets<'_>, offset: usize) -> u64;
+}
+
 /// Marks a view that can only read.
 #[derive(Clone, Copy, Debug)]
 pub struct ReadOnly;
@@ -495,64 +491,96 @@ pub struct ReadOnly;
 #[derive(Clone, Copy, Debug)]
 pub struct ReadWrite;
 
+/// The buckets of a read-only view: plain words when it comes from a shared bitset, cells
+/// when it comes from a mutable view, which keeps writing through the same buckets.
+#[derive(Clone, Copy)]
+pub enum ConstBuckets<'a> {
+    Words(&'a [u64]),
+    Cells(&'a [Cell<u64>]),
+}
+
+impl ViewAccess for ReadOnly {
+    type Buckets<'a> = ConstBuckets<'a>;
+
+    fn load(buckets: ConstBuckets<'_>, offset: usize) -> u64 {
+        match buckets {
+            ConstBuckets::Words(words) => words[offset],
+            ConstBuckets::Cells(cells) => cells[offset].get(),
+        }
+    }
+}
+
+impl ViewAccess for ReadWrite {
+    type Buckets<'a> = &'a [Cell<u64>];
+
+    fn load(buckets: &[Cell<u64>], offset: usize) -> u64 {
+        buckets[offset].get()
+    }
+}
+
 /// Lightweight view caching the underlying bucket slice for tight loops. Performs bounds
-/// checking in debug builds. The buckets are cells, so a view and other views of the same
-/// bitset can live together, as the pointers of the C++ views do.
-pub struct ViewImpl<'a, I: BitsetIndex, Access> {
-    buckets: &'a [Cell<u64>],
+/// checking in debug builds.
+pub struct ViewImpl<'a, I: BitsetIndex, Access: ViewAccess> {
+    buckets: Access::Buckets<'a>,
     bounds_checker: BoundsChecker<I>,
-    access: PhantomData<Access>,
 }
 
 pub type ConstView<'a, I> = ViewImpl<'a, I, ReadOnly>;
 pub type View<'a, I> = ViewImpl<'a, I, ReadWrite>;
 
-impl<I: BitsetIndex, Access> Clone for ViewImpl<'_, I, Access> {
+impl<I: BitsetIndex, Access: ViewAccess> Clone for ViewImpl<'_, I, Access> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<I: BitsetIndex, Access> Copy for ViewImpl<'_, I, Access> {}
+impl<I: BitsetIndex, Access: ViewAccess> Copy for ViewImpl<'_, I, Access> {}
 
-impl<'a, I: BitsetIndex, Access> ViewImpl<'a, I, Access> {
-    fn new(buckets: &'a [Cell<u64>], size: I) -> Self {
+impl<'a, I: BitsetIndex, Access: ViewAccess> ViewImpl<'a, I, Access> {
+    fn new(buckets: Access::Buckets<'a>, size: I) -> Self {
         ViewImpl {
             buckets,
             bounds_checker: BoundsChecker::new(size),
-            access: PhantomData,
         }
     }
 
     /// Returns whether the bit at position `index` is set.
     pub fn is_set(&self, index: I) -> bool {
-        self.get_bucket(index).get() & Self::get_bit_mask(index) != 0
-    }
-
-    fn get_bit_mask(index: I) -> u64 {
-        one_bit64(bit_pos64(index.value_as_u64()) as i32)
-    }
-
-    fn get_bucket(&self, index: I) -> &'a Cell<u64> {
         self.bounds_checker.check(index);
-        &self.buckets[bit_offset64(index.value_as_u64()) as usize]
+        Access::load(self.buckets, bit_offset64(index.value_as_u64()) as usize)
+            & get_bit_mask(index)
+            != 0
     }
 }
 
-impl<I: BitsetIndex> ViewImpl<'_, I, ReadWrite> {
+fn get_bit_mask<I: BitsetIndex>(index: I) -> u64 {
+    one_bit64(bit_pos64(index.value_as_u64()) as i32)
+}
+
+impl<'a, I: BitsetIndex> ViewImpl<'a, I, ReadWrite> {
+    /// A read-only view of the same buckets, which sees what this view writes.
+    pub fn as_const(&self) -> ConstView<'a, I> {
+        ViewImpl {
+            buckets: ConstBuckets::Cells(self.buckets),
+            bounds_checker: self.bounds_checker,
+        }
+    }
+
     pub fn clear(&mut self, index: I) {
-        let bucket = self.get_bucket(index);
-        bucket.set(bucket.get() & !Self::get_bit_mask(index));
+        self.bounds_checker.check(index);
+        let bucket = &self.buckets[bit_offset64(index.value_as_u64()) as usize];
+        bucket.set(bucket.get() & !get_bit_mask(index));
     }
 
     pub fn set(&mut self, index: I) {
-        let bucket = self.get_bucket(index);
-        bucket.set(bucket.get() | Self::get_bit_mask(index));
+        self.bounds_checker.check(index);
+        let bucket = &self.buckets[bit_offset64(index.value_as_u64()) as usize];
+        bucket.set(bucket.get() | get_bit_mask(index));
     }
 }
 
 // `operator[]`: the bit as a `bool`.
-impl<I: BitsetIndex, Access> Index<I> for ViewImpl<'_, I, Access> {
+impl<I: BitsetIndex, Access: ViewAccess> Index<I> for ViewImpl<'_, I, Access> {
     type Output = bool;
 
     fn index(&self, index: I) -> &bool {
@@ -567,7 +595,7 @@ impl<I: BitsetIndex, Access> Index<I> for ViewImpl<'_, I, Access> {
 #[derive(Clone)]
 pub struct Bitset64<I: BitsetIndex = i64> {
     size: I,
-    buckets: Vec<Cell<u64>>,
+    buckets: Vec<u64>,
 }
 
 impl<I: BitsetIndex> Default for Bitset64<I> {
@@ -585,19 +613,21 @@ impl<I: BitsetIndex> Bitset64<I> {
     pub fn new(size: I) -> Self {
         Bitset64 {
             size,
-            buckets: vec![Cell::new(0); Self::get_num_buckets(size)],
+            buckets: vec![0; Self::get_num_buckets(size)],
         }
     }
 
     /// Returns a read-only or mutable view caching the underlying bucket slice.
     pub fn const_view(&self) -> ConstView<'_, I> {
-        ConstView::new(&self.buckets, self.size)
+        ConstView::new(ConstBuckets::Words(&self.buckets), self.size)
     }
 
-    // Upstream `view()` is not `const` but a view and a const view live together in its
-    // tests, so the mutable view borrows the bitset as shared, through the cells.
-    pub fn view(&self) -> View<'_, I> {
-        View::new(&self.buckets, self.size)
+    pub fn view(&mut self) -> View<'_, I> {
+        let size = self.size;
+        View::new(
+            Cell::from_mut(&mut self.buckets[..]).as_slice_of_cells(),
+            size,
+        )
     }
 
     /// Returns the number of bits in this bitset.
@@ -611,15 +641,14 @@ impl<I: BitsetIndex> Bitset64<I> {
     }
 
     pub fn resize(&mut self, size: I) {
-        self.buckets
-            .resize(Self::get_num_buckets(size), Cell::new(0));
+        self.buckets.resize(Self::get_num_buckets(size), 0);
         let bit_pos = bit_pos64(size.value_as_u64());
         if size < self.size && bit_pos != 0 {
             let last = self
                 .buckets
-                .last()
+                .last_mut()
                 .expect("a bitset that shrinks to a partial bucket has a bucket");
-            last.set(last.get() & (one_bit64(bit_pos as i32) - 1));
+            *last &= one_bit64(bit_pos as i32) - 1;
         }
         self.size = size;
     }
@@ -627,14 +656,13 @@ impl<I: BitsetIndex> Bitset64<I> {
     /// Resizes the bitset to `size` bits and clears all the bits.
     pub fn clear_and_resize(&mut self, size: I) {
         self.size = size;
-        self.buckets
-            .resize(Self::get_num_buckets(size), Cell::new(0));
+        self.buckets.resize(Self::get_num_buckets(size), 0);
         self.clear_all();
     }
 
     /// Clears all the bits.
     pub fn clear_all(&mut self) {
-        self.buckets.fill(Cell::new(0));
+        self.buckets.fill(0);
     }
 
     /// Clears the bit at position `index`.
@@ -644,7 +672,8 @@ impl<I: BitsetIndex> Bitset64<I> {
 
     /// Clears all the bits in the bucket containing bit `index`.
     pub fn clear_bucket(&mut self, index: I) {
-        self.view().get_bucket(index).set(0);
+        let offset = self.bucket_offset(index);
+        self.buckets[offset] = 0;
     }
 
     /// Returns whether the bit at position `index` is set.
@@ -668,8 +697,9 @@ impl<I: BitsetIndex> Bitset64<I> {
 
     /// Copies the bucket containing bit `index` from `other` to `*this`.
     pub fn copy_bucket(&mut self, other: &Bitset64<I>, index: I) {
-        let value = other.const_view().get_bucket(index).get();
-        self.view().get_bucket(index).set(value);
+        let value = other.buckets[other.bucket_offset(index)];
+        let offset = self.bucket_offset(index);
+        self.buckets[offset] = value;
     }
 
     /// Replaces `*this` with the bitwise intersection of `*this` and `other`. The bitsets
@@ -677,10 +707,10 @@ impl<I: BitsetIndex> Bitset64<I> {
     /// cleared to 0.
     pub fn intersection(&mut self, other: &Bitset64<I>) {
         let common = self.buckets.len().min(other.buckets.len());
-        for (bucket, other_bucket) in self.buckets.iter().zip(&other.buckets) {
-            bucket.set(bucket.get() & other_bucket.get());
+        for (bucket, other_bucket) in self.buckets.iter_mut().zip(&other.buckets) {
+            *bucket &= other_bucket;
         }
-        self.buckets[common..].fill(Cell::new(0));
+        self.buckets[common..].fill(0);
     }
 
     /// Sets `*this` to the bitwise intersection of `a` and `b`, which must have the same
@@ -688,8 +718,10 @@ impl<I: BitsetIndex> Bitset64<I> {
     pub fn set_to_intersection_of(&mut self, a: &Bitset64<I>, b: &Bitset64<I>) {
         debug_assert_eq!(a.size(), b.size());
         self.resize(a.size());
-        for ((bucket, a_bucket), b_bucket) in self.buckets.iter().zip(&a.buckets).zip(&b.buckets) {
-            bucket.set(a_bucket.get() & b_bucket.get());
+        for ((bucket, a_bucket), b_bucket) in
+            self.buckets.iter_mut().zip(&a.buckets).zip(&b.buckets)
+        {
+            *bucket = a_bucket & b_bucket;
         }
     }
 
@@ -697,14 +729,14 @@ impl<I: BitsetIndex> Bitset64<I> {
     /// have to be the same size; if `other` is smaller, higher-order bits of `*this` are
     /// unchanged, and if `other` is larger, its extra bits are ignored.
     pub fn union(&mut self, other: &Bitset64<I>) {
-        for (bucket, other_bucket) in self.buckets.iter().zip(&other.buckets) {
-            bucket.set(bucket.get() | other_bucket.get());
+        for (bucket, other_bucket) in self.buckets.iter_mut().zip(&other.buckets) {
+            *bucket |= other_bucket;
         }
     }
 
     /// Returns true if all bits are 0.
     pub fn is_all_false(&self) -> bool {
-        self.buckets.iter().all(|bucket| bucket.get() == 0)
+        self.buckets.iter().all(|&bucket| bucket == 0)
     }
 
     /// Returns iterators over the indices of bits set to 1, as `begin()` and `end()` do
@@ -715,6 +747,11 @@ impl<I: BitsetIndex> Bitset64<I> {
 
     pub fn end(&self) -> Bitset64Iterator<'_, I> {
         Bitset64Iterator::at_bucket(self.buckets.len())
+    }
+
+    fn bucket_offset(&self, index: I) -> usize {
+        BoundsChecker::new(self.size).check(index);
+        bit_offset64(index.value_as_u64()) as usize
     }
 
     fn get_num_buckets(size: I) -> usize {
@@ -746,7 +783,7 @@ impl<'a, I: BitsetIndex> IntoIterator for &'a Bitset64<I> {
 /// bitset while iterating produces undefined results.
 #[derive(Clone, Debug)]
 pub struct Bitset64Iterator<'a, I: BitsetIndex> {
-    buckets: &'a [Cell<u64>],
+    buckets: &'a [u64],
     size: usize,
     bucket: usize,
     current: u64,
@@ -810,7 +847,7 @@ impl<'a, I: BitsetIndex> Bitset64Iterator<'a, I> {
         // `buckets` is never read when it is empty.
         debug_assert!(!self.buckets.is_empty() || self.bucket == self.size);
         while self.bucket != self.size {
-            self.current = self.buckets[self.bucket].get();
+            self.current = self.buckets[self.bucket];
             if self.current != 0 {
                 break;
             }
@@ -932,8 +969,7 @@ impl BitQueue64 {
 /// A simple utility class to set/unset integer in a range [0, size). This is optimized for
 /// sparsity.
 ///
-/// It is not `Clone`: `copy_from` copies it. Upstream `SetUnsafe` is not ported: it needs
-/// a view of the bitset and `&mut self` at once, which the borrow checker refuses.
+/// It is not `Clone`: `copy_from` copies it.
 pub struct SparseBitset<I: BitsetIndex = i64> {
     bitset: Bitset64<I>,
     to_clear: Vec<I>,
@@ -1006,12 +1042,19 @@ impl<I: BitsetIndex> SparseBitset<I> {
         self.to_clear.clone_from(&other.to_clear);
     }
 
-    pub fn view(&self) -> View<'_, I> {
+    pub fn view(&mut self) -> View<'_, I> {
         self.bitset.view()
     }
 
     pub fn const_view(&self) -> ConstView<'_, I> {
         self.bitset.const_view()
+    }
+
+    // `SetUnsafe` of upstream (bitset.h:647) takes a view of the bitset as a parameter, which
+    // a `&mut self` method cannot be handed, so this method makes the view itself.
+    pub fn set_unsafe(&mut self, index: I) {
+        self.bitset.view().set(index);
+        self.to_clear.push(index);
     }
 
     pub fn clear(&mut self, index: I) {
@@ -1063,7 +1106,7 @@ mod tests {
     use rand_chacha::rand_core::{RngCore, SeedableRng};
 
     use super::*;
-    use crate::define_strong_int64_type;
+    use crate::{define_strong_index_type, define_strong_int64_type};
 
     // A uniform draw in [lo, hi).
     fn uniform(random: &mut ChaCha8Rng, lo: i32, hi: i32) -> i32 {
@@ -1593,6 +1636,45 @@ mod tests {
     }
 
     #[test]
+    fn sparse_bitset_set_unsafe_sets_the_bit_and_records_it_for_clearing() {
+        // Arrange
+        let mut bitset: SparseBitset<TestIndex> = SparseBitset::new(TestIndex::new(100));
+        // Act
+        bitset.set_unsafe(TestIndex::new(5));
+        bitset.set_unsafe(TestIndex::new(70));
+        // Assert
+        assert!(bitset[TestIndex::new(5)]);
+        assert!(bitset[TestIndex::new(70)]);
+        assert_eq!(bitset.number_of_set_calls_with_different_arguments(), 2);
+        bitset.reset_all_to_false();
+        assert!(!bitset[TestIndex::new(5)]);
+        assert!(!bitset[TestIndex::new(70)]);
+    }
+
+    define_strong_index_type!(TestStrongIndex);
+
+    #[test]
+    fn bitset64_over_a_type_of_each_strong_macro_sets_and_iterates() {
+        // Arrange
+        let mut int64_bitset: Bitset64<TestIndex> = Bitset64::new(TestIndex::new(100));
+        let mut index_bitset: Bitset64<TestStrongIndex> = Bitset64::new(TestStrongIndex::new(100));
+        // Act
+        int64_bitset.set(TestIndex::new(70));
+        index_bitset.set(TestStrongIndex::new(70));
+        // Assert
+        assert_eq!(int64_bitset.size(), TestIndex::new(100));
+        assert_eq!(index_bitset.size(), TestStrongIndex::new(100));
+        assert_eq!(
+            int64_bitset.into_iter().collect::<Vec<_>>(),
+            [TestIndex::new(70)]
+        );
+        assert_eq!(
+            index_bitset.into_iter().collect::<Vec<_>>(),
+            [TestStrongIndex::new(70)]
+        );
+    }
+
+    #[test]
     fn bitset64_test_basic_functions() {
         let k_size = TestIndex::new(100);
         let mut bitset: Bitset64<TestIndex> = Bitset64::new(k_size);
@@ -1643,8 +1725,8 @@ mod tests {
 
     #[test]
     fn bitset64_test_integer_specialization() {
-        const K_SIZE: i32 = 1000;
-        let mut bitset: Bitset64<i32> = Bitset64::new(K_SIZE);
+        const K_SIZE: i64 = 1000;
+        let mut bitset: Bitset64<i64> = Bitset64::new(K_SIZE);
         assert_eq!(K_SIZE, bitset.size());
         for i in 0..K_SIZE {
             assert!(!bitset.is_set(i));
@@ -1931,22 +2013,33 @@ mod tests {
     const _: () = assert_copy::<View<'static, TestIndex>>();
     const _: () = assert_copy::<ConstView<'static, TestIndex>>();
     // Upstream asserts that a view is as large as `uint64_t*`. A Rust view holds a slice, a
-    // pointer and a length, so the assertion is that the bounds checker adds nothing to it
-    // in a release build.
+    // pointer and a length, and a read-only view also tells which kind of slice it holds, so
+    // the assertion is that the bounds checker adds nothing to them in a release build.
     #[cfg(not(debug_assertions))]
     const _: () = {
         assert!(size_of::<View<'static, i32>>() == size_of::<&[Cell<u64>]>());
-        assert!(size_of::<ConstView<'static, i32>>() == size_of::<&[Cell<u64>]>());
+        assert!(size_of::<ConstView<'static, i32>>() == size_of::<ConstBuckets<'static>>());
         assert!(size_of::<View<'static, TestIndex>>() == size_of::<&[Cell<u64>]>());
-        assert!(size_of::<ConstView<'static, TestIndex>>() == size_of::<&[Cell<u64>]>());
+        assert!(size_of::<ConstView<'static, TestIndex>>() == size_of::<ConstBuckets<'static>>());
     };
+
+    // Shared references to a bitset can cross threads, which they could not if a shared
+    // reference let a holder change its bits.
+    const fn assert_sync<T: Sync>() {}
+    const _: () = assert_sync::<Bitset64<i64>>();
+    const _: () = assert_sync::<Bitset64<TestIndex>>();
+    const _: () = assert_sync::<SparseBitset<i64>>();
+    const _: () = assert_sync::<SparseBitset<TestIndex>>();
 
     #[test]
     fn bitset64_test_views() {
         // Arrange
-        let bitset: Bitset64<TestIndex> = Bitset64::new(TestIndex::new(100));
+        let mut bitset: Bitset64<TestIndex> = Bitset64::new(TestIndex::new(100));
         let mut view: View<'_, TestIndex> = bitset.view();
-        let const_view: ConstView<'_, TestIndex> = bitset.const_view();
+        // Upstream takes `bitset.const_view()` here (bitset_test.cc:734) while `view` is
+        // alive, which the borrow checker refuses, so the mutable view hands out the
+        // read-only one.
+        let const_view: ConstView<'_, TestIndex> = view.as_const();
 
         // Act
         view.set(TestIndex::new(0));
@@ -1972,7 +2065,7 @@ mod tests {
     #[test]
     fn bitset64_death_test_view_bounds_checking() {
         // Arrange
-        let empty: Bitset64<TestIndex> = Bitset64::default();
+        let mut empty: Bitset64<TestIndex> = Bitset64::default();
         // Act and Assert
         expect_death(
             || {
@@ -1994,9 +2087,9 @@ mod tests {
 
         // Size 10 allocates a single 64-bit bucket, so indices 10 and 63 lie within the
         // allocated word but outside [0, size).
-        let bitset: Bitset64<TestIndex> = Bitset64::new(TestIndex::new(10));
+        let mut bitset: Bitset64<TestIndex> = Bitset64::new(TestIndex::new(10));
         let mut view: View<'_, TestIndex> = bitset.view();
-        let const_view: ConstView<'_, TestIndex> = bitset.const_view();
+        let const_view: ConstView<'_, TestIndex> = view.as_const();
 
         expect_death(
             || {
