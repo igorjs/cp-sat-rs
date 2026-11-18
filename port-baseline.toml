@@ -273,3 +273,185 @@ reason = "checks the CHECK_NE of the signed value constructor"
 [[file.added]]
 name = "literals_order_by_index_and_print_with_a_sign"
 reason = "checks the order, the text of a literal, a span of literals and a span of indices, and the helper Literals"
+
+[[file]]
+upstream = "sat/cp_model_utils_test.cc"
+rust = "crates/sat/src/cp_model_utils.rs"
+binary = "cpsat_sat"
+module = "cp_model_utils::tests"
+upstream_cases = 36
+pending = 0
+
+[[file.added]]
+name = "convert_cp_model_proto_to_wcnf_writes_hard_clauses_and_weights"
+reason = "upstream has no case for the wcnf writer; checks the hard clauses and the weights"
+
+[[file.added]]
+name = "convert_cp_model_proto_to_wcnf_refuses_a_model_without_an_integral_objective"
+reason = "checks the refusals of the wcnf writer"
+
+[[file.added]]
+name = "convert_cp_model_proto_to_cnf_refuses_a_model_that_is_not_pure_sat"
+reason = "checks the refusals of the cnf writer"
+
+[[file.added]]
+name = "combine_seed_is_non_negative_and_depends_on_both_arguments"
+reason = "upstream has no case for CombineSeed"
+
+[[file.added]]
+name = "combine_seed_of_a_negative_delta_dies"
+reason = "checks the CHECK_GE of CombineSeed"
+
+[[file.added]]
+name = "fingerprint_model_is_stable_and_sees_each_part_of_the_model"
+reason = "upstream has no case for FingerprintModel; checks stability and sensitivity"
+
+[[file.added]]
+name = "write_model_proto_to_file_writes_the_binary_form_and_reports_a_failure"
+reason = "upstream has no case for the file writer; checks the binary form and a failed write"
+
+[[file.added]]
+name = "is_affine_int_abs_accepts_the_absolute_value_form_only"
+reason = "upstream has no case for IsAffineIntAbs"
+
+[[file.added]]
+name = "linear_expression_protos_are_equal_ignores_the_order_and_applies_the_scaling"
+reason = "upstream has no case for the equality and order of expressions"
+
+[[file.added]]
+name = "expressions_contains_only_one_var_needs_a_single_shared_variable"
+reason = "upstream has no case for ExpressionsContainsOnlyOneVar"
+
+[[file.added]]
+name = "apply_to_all_indices_visits_the_variables_literals_and_intervals_of_each_kind"
+reason = "upstream has no case for the index visitors"
+
+[[file.added]]
+name = "interval_variables_are_inserted_into_and_removed_from_a_bitset"
+reason = "upstream has no case for the interval bitset helpers"
+
+[[file.added]]
+name = "domain_helpers_read_write_and_search_a_proto_domain"
+reason = "upstream has no case for the domain helpers of a proto"
+
+[[file.added]]
+name = "objective_value_helpers_scale_postsolve_and_presolve"
+reason = "upstream has no case for the objective scaling helpers"
+
+[[file.added]]
+name = "linear_expression_helpers_divide_evaluate_and_convert"
+reason = "upstream has no case for DivideLinearExpression and the affine helpers"
+
+[[file.added]]
+name = "literals_to_linear_moves_the_offset_of_a_negated_literal_into_the_bounds"
+reason = "upstream has no case for LiteralsToLinear"
+
+[[file.added]]
+name = "find_complementary_var_in_sorted_literals_dies_on_unsorted_literals_in_debug"
+reason = "checks the DCHECK of a sorted input"
+
+[[file.added]]
+name = "affine_expr_to_string_of_the_smallest_offset_matches_the_reference"
+reason = "checks the text for the smallest int64 offset against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_offset_and_0_matches_the_reference"
+reason = "checks the std::abs of the smallest int64 offset against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_coefficient_and_0_matches_the_reference"
+reason = "checks the std::abs of the smallest int64 coefficient against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_offset_and_6_matches_the_reference"
+reason = "checks the gcd of the smallest int64 offset and 6 against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_coefficient_and_6_matches_the_reference"
+reason = "checks the gcd of the smallest int64 coefficient and 6 against the reference build"
+
+[[file.added]]
+name = "expression_contains_single_ref_of_the_smallest_coefficient_matches_the_reference"
+reason = "checks the std::abs of the smallest int64 coefficient against the reference build"
+
+[[file.added]]
+name = "fingerprint_model_of_a_model_with_a_linear_and_a_lin_max_matches_the_reference"
+reason = "checks golden fingerprints of the reference build"
+
+[[file.added]]
+name = "fingerprint_model_of_a_model_with_boolean_constraints_matches_the_reference"
+reason = "checks golden fingerprints of the reference build"
+
+[[file.added]]
+name = "fingerprint_model_of_a_model_with_all_diff_and_element_matches_the_reference"
+reason = "checks golden fingerprints of the reference build"
+
+[[file.added]]
+name = "fingerprint_expression_of_an_expression_with_terms_matches_the_reference"
+reason = "checks golden fingerprints of the reference build with two seeds"
+
+[[file.added]]
+name = "fingerprint_expression_of_a_constant_matches_the_reference"
+reason = "checks golden fingerprints of the reference build with two seeds"
+
+[[file.added]]
+name = "fingerprint_expression_of_an_empty_expression_matches_the_reference"
+reason = "checks golden fingerprints of an empty expression with two seeds"
+
+[[file.added]]
+name = "combine_seed_matches_the_reference"
+reason = "checks golden seeds of the reference build"
+
+[[file.added]]
+name = "constraint_case_names_the_kind_of_each_constraint_and_the_unset_case"
+reason = "checks the kind of every constraint, the Rust form of the generated constraint_case()"
+
+[[file.added]]
+name = "canonicalize_lin_max_of_another_constraint_dies_in_debug_and_switches_in_release"
+reason = "checks the DCHECK in debug and the switch of the oneof in release"
+
+# util/full_precision_inequalities is ported in part: what sat/cp_model_utils calls. The rest is
+# a stub and each upstream case that needs it is a pending line.
+[[file]]
+upstream = "util/full_precision_inequalities_test.cc"
+rust = "crates/util/src/full_precision_inequalities.rs"
+binary = "cpsat_util"
+module = "full_precision_inequalities::tests"
+upstream_cases = 62
+pending = 61
+
+[[file.added]]
+name = "a_sum_that_is_not_a_double_gets_one_step_wide_bounds"
+reason = "checks the bounds of 1 + 2^-53, which no double holds"
+
+[[file.added]]
+name = "a_negative_exact_sum_has_equal_bounds"
+reason = "checks the two's complement path of a negative sum and its integer bounds"
+
+[[file.added]]
+name = "terms_that_cancel_leave_the_small_term"
+reason = "checks the carry of a large term cancelled by its opposite, which leaves the small term"
+
+[[file.added]]
+name = "a_product_past_int64_has_no_upper_integer_bound"
+reason = "checks the integer bounds of a product above the largest int64"
+
+[[file.added]]
+name = "an_infinite_term_makes_the_sum_infinite_and_fixes_its_sign"
+reason = "checks the infinite state and its bounds"
+
+[[file.added]]
+name = "opposite_infinite_terms_die"
+reason = "checks the CHECK_EQ of the infinite sign"
+
+[[file.added]]
+name = "an_infinite_factor_times_zero_dies"
+reason = "checks the CHECK_NE of the zero factor"
+
+[[file.added]]
+name = "a_negative_sum_that_is_not_a_double_gets_one_step_wide_bounds"
+reason = "checks the bounds of -1 - 2^-53, which no double holds"
+
+[[file.added]]
+name = "a_sum_just_under_a_double_gets_bounds_that_end_on_it"
+reason = "ports a parameter row of an upstream case that needs unported items: 1 - denorm_min"

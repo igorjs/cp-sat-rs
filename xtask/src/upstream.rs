@@ -6,7 +6,7 @@ use std::path::Path;
 
 const INCLUDE_PREFIX: &str = "#include \"ortools/";
 const GENERATED_HEADER_SUFFIX: &str = ".pb.h";
-const TEST_FILE_SUFFIX: &str = "_test.cc";
+pub const TEST_FILE_SUFFIX: &str = "_test.cc";
 /// Files with this in their name are test code: the test files, and test helpers such as
 /// `cp_model_test_utils.h`. The plan's totals leave all of them out.
 const TEST_NAME_MARKER: &str = "_test";

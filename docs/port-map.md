@@ -20,7 +20,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | 1 | 0 | 0 |
 | 2 | 0 | 0 |
 | 3 | 0 | 0 |
-| 4 | 0 | 0 |
+| 4 | 0 | 61 |
 | 5 | 0 | 0 |
 | 6 | 0 | 0 |
 
@@ -223,8 +223,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/cp_model_table.h` | 78 | `sat/cp_model_table_test.cc` | 12 | `base/types.h`, `sat/presolve_context.h` | 16 | - | todo |
 | sat | `sat/cp_model_test_utils.cc` | 141 | none | - | `base/types.h`, `sat/cp_model_test_utils.h`, `sat/cp_model_utils.h` | 4 | 0 | todo |
 | sat | `sat/cp_model_test_utils.h` | 45 | none | - | - | 0 | 0 | todo |
-| sat | `sat/cp_model_utils.cc` | 1605 | `sat/cp_model_utils_test.cc` | 36 | `base/macros/os_support.h`, `base/stl_util.h`, `sat/cp_model_utils.h`, `sat/sat_literal.h`, `util/full_precision_inequalities.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 4 | 0 | todo |
-| sat | `sat/cp_model_utils.h` | 691 | `sat/cp_model_utils_test.cc` | 36 | `base/base_export.h`, `base/hash.h`, `base/helpers.h`, `base/macros/os_support.h`, `base/options.h`, `base/types.h`, `util/bitset.h`, `util/sorted_interval_list.h` | 3 | 0 | todo |
+| sat | `sat/cp_model_utils.cc` | 1605 | `sat/cp_model_utils_test.cc` | 36 | `base/macros/os_support.h`, `base/stl_util.h`, `sat/cp_model_utils.h`, `sat/sat_literal.h`, `util/full_precision_inequalities.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 4 | 0 | partial |
+| sat | `sat/cp_model_utils.h` | 691 | `sat/cp_model_utils_test.cc` | 36 | `base/base_export.h`, `base/hash.h`, `base/helpers.h`, `base/macros/os_support.h`, `base/options.h`, `base/types.h`, `util/bitset.h`, `util/sorted_interval_list.h` | 3 | 0 | partial |
 | sat | `sat/cumulative.cc` | 417 | `sat/cumulative_test.cc` | 16 | `sat/cumulative.h`, `sat/cumulative_energy.h`, `sat/disjunctive.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/integer_expr.h`, `sat/intervals.h`, `sat/linear_constraint.h`, `sat/model.h`, `sat/pb_constraint.h`, `sat/precedences.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/scheduling_helpers.h`, `sat/timetable.h`, `sat/timetable_edgefinding.h`, `util/strong_integers.h` | 17 | - | todo |
 | sat | `sat/cumulative.h` | 75 | `sat/cumulative_test.cc` | 16 | `sat/integer_base.h`, `sat/intervals.h`, `sat/model.h`, `sat/sat_literal.h`, `sat/scheduling_helpers.h` | 16 | - | todo |
 | sat | `sat/cumulative_energy.cc` | 672 | `sat/cumulative_energy_test.cc` | 21 | `base/iterator_adaptors.h`, `sat/2d_orthogonal_packing.h`, `sat/cumulative_energy.h`, `sat/diffn_util.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/scheduling_helpers.h`, `sat/synchronization.h`, `sat/util.h`, `util/scheduling.h`, `util/strong_integers.h` | 14 | - | todo |
@@ -419,8 +419,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | util | `util/fp_roundtrip_conv.h` | 106 | `util/fp_roundtrip_conv_test.cc` | 10 | `base/base_export.h` | 1 | - | todo |
 | util | `util/fp_utils.cc` | 504 | `util/fp_utils_test.cc` | 33 | `base/types.h`, `util/bitset.h`, `util/fp_utils.h`, `util/full_precision_inequalities.h` | 3 | - | todo |
 | util | `util/fp_utils.h` | 431 | `util/fp_utils_test.cc` | 33 | `util/full_precision_inequalities.h` | 2 | - | todo |
-| util | `util/full_precision_inequalities.cc` | 669 | `util/full_precision_inequalities_test.cc` | 62 | `base/types.h`, `util/full_precision_inequalities.h` | 2 | - | todo |
-| util | `util/full_precision_inequalities.h` | 607 | `util/full_precision_inequalities_test.cc` | 62 | `port/attributes.h` | 1 | - | todo |
+| util | `util/full_precision_inequalities.cc` | 669 | `util/full_precision_inequalities_test.cc` | 62 | `base/types.h`, `util/full_precision_inequalities.h` | 2 | - | partial |
+| util | `util/full_precision_inequalities.h` | 607 | `util/full_precision_inequalities_test.cc` | 62 | `port/attributes.h` | 1 | - | partial |
 | util | `util/integer_pq.h` | 192 | `util/integer_pq_test.cc` | 1 | - | 0 | - | todo |
 | util | `util/logging.cc` | 134 | `util/logging_test.cc` | 5 | `util/logging.h` | 3 | - | todo |
 | util | `util/logging.h` | 189 | `util/logging_test.cc` | 5 | `base/timer.h`, `util/time_limit.h` | 2 | - | todo |

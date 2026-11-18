@@ -12,6 +12,7 @@ const IGNORE_ATTRIBUTE: &str = "#[ignore";
 const CFG_ATTR_PREFIX: &str = "#[cfg_attr(";
 const IGNORE_WORD: &str = "ignore";
 const PENDING_PREFIX: &str = "// PENDING(phase ";
+const PENDING_MARKER: &str = "// PENDING(";
 const PHASE_REASON_PREFIX: &str = "phase ";
 const FUNCTION_KEYWORD: &str = "fn ";
 /// How many lines below an attribute the function it belongs to may start.
@@ -96,7 +97,11 @@ fn visit(folder: &Path, relative: &str, tree: &mut RustTree) -> Result<(), Strin
 
 fn scan_file(path: &str, text: &str, tree: &mut RustTree) {
     let lines: Vec<&str> = text.lines().collect();
-    let has_stub = text.contains(STUB_MARKER);
+    // A file that still waits on a later phase, by a stub or a pending line, is partial.
+    let has_stub = text.contains(STUB_MARKER)
+        || lines
+            .iter()
+            .any(|line| line.trim().starts_with(PENDING_MARKER));
     let mut is_ported = false;
     let mut has_tests = false;
     for (at, line) in lines.iter().enumerate() {
