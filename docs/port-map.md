@@ -17,7 +17,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | Phase | Ignored tests | Pending lines |
 |---|---|---|
 | 0 | 0 | 0 |
-| 1 | 12 | 60 |
+| 1 | 0 | 60 |
 | 2 | 7 | 23 |
 | 3 | 0 | 0 |
 | 4 | 0 | 61 |
@@ -193,8 +193,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/cp_constraints.h` | 179 | `sat/cp_constraints_test.cc` | 4 | `sat/enforcement.h`, `sat/enforcement_helper.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/sat_literal.h`, `sat/sat_trail.h` | 10 | - | todo |
 | sat | `sat/cp_model.cc` | 1639 | `sat/cp_model_test.cc` | 80 | `base/types.h`, `sat/cp_model.h`, `sat/cp_model_utils.h`, `util/sorted_interval_list.h` | 5 | - | todo |
 | sat | `sat/cp_model.h` | 1484 | `sat/cp_model_test.cc` | 80 | `base/types.h`, `sat/cp_model_solver.h`, `sat/cp_model_utils.h`, `sat/model.h`, `util/sorted_interval_list.h` | 4 | - | todo |
-| sat | `sat/cp_model_checker.cc` | 2107 | `sat/cp_model_checker_test.cc` | 47 | `base/types.h`, `port/proto_utils.h`, `sat/cp_model_checker.h`, `sat/cp_model_utils.h`, `sat/diffn_util.h`, `sat/primary_variables.h`, `sat/util.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 14 | 0 | partial |
-| sat | `sat/cp_model_checker.h` | 96 | `sat/cp_model_checker_test.cc` | 47 | - | 0 | 0 | partial |
+| sat | `sat/cp_model_checker.cc` | 2107 | `sat/cp_model_checker_test.cc` | 47 | `base/types.h`, `port/proto_utils.h`, `sat/cp_model_checker.h`, `sat/cp_model_utils.h`, `sat/diffn_util.h`, `sat/primary_variables.h`, `sat/util.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 14 | 0 | done |
+| sat | `sat/cp_model_checker.h` | 96 | `sat/cp_model_checker_test.cc` | 47 | - | 0 | 0 | done |
 | sat | `sat/cp_model_copy.cc` | 2675 | `sat/cp_model_copy_test.cc` | 29 | `base/macros/os_support.h`, `base/protobuf_util.h`, `base/stl_util.h`, `base/types.h`, `sat/cp_model_copy.h`, `sat/cp_model_utils.h`, `sat/lrat_proof_handler.h`, `sat/model.h`, `sat/sat_clause.h`, `sat/sat_literal.h`, `sat/synchronization.h`, `util/logging.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/time_limit.h` | 16 | - | todo |
 | sat | `sat/cp_model_copy.h` | 625 | `sat/cp_model_copy_test.cc` | 29 | `base/types.h`, `sat/cp_model_utils.h`, `sat/lrat_proof_handler.h`, `sat/model.h`, `sat/sat_clause.h`, `sat/sat_literal.h`, `sat/solution_crush.h`, `sat/synchronization.h`, `util/bitset.h`, `util/logging.h`, `util/sorted_interval_list.h`, `util/strong_integers.h` | 15 | - | todo |
 | sat | `sat/cp_model_copy_benchmark.cc` | 1535 | none | - | `sat/cp_model_copy.h`, `sat/cp_model_utils.h`, `sat/model.h`, `sat/synchronization.h` | 16 | - | todo |

@@ -514,7 +514,118 @@ rust = "crates/sat/src/cp_model_checker.rs"
 binary = "cpsat_sat"
 module = "cp_model_checker::tests"
 upstream_cases = 47
-ignored = 12
+
+[[file.added]]
+name = "solution_is_feasible_rejects_a_wrong_number_of_values_and_a_value_outside_its_domain"
+reason = "upstream has no case for a vector of the wrong length"
+
+[[file.added]]
+name = "solution_is_feasible_checks_bool_or_and_bool_and"
+reason = "upstream has no case for the two Boolean constraints; checks plain and negated literals"
+
+[[file.added]]
+name = "solution_is_feasible_checks_at_most_one_and_exactly_one"
+reason = "upstream has no case for these two constraints; checks the count of true literals"
+
+[[file.added]]
+name = "solution_is_feasible_checks_int_prod"
+reason = "upstream has no case for int_prod; checks the target against the product"
+
+[[file.added]]
+name = "solution_is_feasible_checks_int_div_and_int_mod"
+reason = "upstream has no case for these two constraints; checks the target against the quotient and the remainder"
+
+[[file.added]]
+name = "solution_is_feasible_checks_all_diff"
+reason = "upstream has no case for all_diff; checks equal values of two expressions"
+
+[[file.added]]
+name = "solution_is_feasible_checks_the_start_size_and_end_of_an_interval"
+reason = "upstream checks an interval only through scheduling constraints; checks the sum of start and size, and a negative size"
+
+[[file.added]]
+name = "solution_is_feasible_checks_no_overlap"
+reason = "upstream has no case for no_overlap; checks overlapping, touching and not enforced intervals"
+
+[[file.added]]
+name = "solution_is_feasible_checks_no_overlap_2d_with_and_without_zero_sizes"
+reason = "upstream has one no_overlap_2d model; checks overlapping and touching boxes and a zero width box through both intersection functions"
+
+[[file.added]]
+name = "solution_is_feasible_checks_the_load_and_the_capacity_of_a_cumulative"
+reason = "upstream has no case for cumulative; checks the load, a negative capacity, a not enforced interval and an empty interval"
+
+[[file.added]]
+name = "solution_is_feasible_checks_element_in_both_formats"
+reason = "upstream has no case for element; checks the legacy and the linear format, the index bounds and the empty constraint"
+
+[[file.added]]
+name = "solution_is_feasible_checks_table_and_negated_table"
+reason = "upstream has no case for table; checks rows, a negated table, expressions and no expression"
+
+[[file.added]]
+name = "solution_is_feasible_checks_automaton_with_variables_and_with_expressions"
+reason = "upstream has no case for automaton; checks the walk, a missing transition and the final state"
+
+[[file.added]]
+name = "solution_is_feasible_checks_circuit_shapes"
+reason = "upstream checks one circuit with self loops and one sparse circuit; checks a cycle, two cycles, two outgoing arcs, a missing next and a rho shape"
+
+[[file.added]]
+name = "solution_is_feasible_checks_routes_shapes"
+reason = "upstream has no case for routes; checks each way a set of arcs can fail to be a set of routes"
+
+[[file.added]]
+name = "solution_is_feasible_accepts_an_empty_constraint"
+reason = "upstream has no case for an unset constraint"
+
+[[file.added]]
+name = "solution_is_feasible_dies_on_the_dummy_constraint"
+reason = "checks the LOG(FATAL) of an unsupported constraint kind"
+
+[[file.added]]
+name = "solution_is_feasible_walks_the_postsolve_mapping_of_a_failing_constraint"
+reason = "upstream does not pass the two debugging arguments; checks that the mapping is read for a failing constraint"
+
+[[file.added]]
+name = "solution_is_feasible_checks_an_objective_without_domain"
+reason = "upstream checks the objective only with a domain; checks the scaled objective path"
+
+[[file.added]]
+name = "constraint_is_feasible_checks_one_constraint_against_the_model"
+reason = "upstream has no case for the single constraint check"
+
+[[file.added]]
+name = "solution_can_be_optimal_is_true_and_checks_dependent_variables_when_the_flag_is_set"
+reason = "upstream has no case for solution_can_be_optimal; checks the default and the flag that recomputes the secondary variables"
+
+[[file.added]]
+name = "validate_cp_model_rejects_each_malformed_model"
+reason = "upstream checks about a third of the error messages; checks one model for each other error of the validation"
+
+[[file.added]]
+name = "validate_cp_model_accepts_each_kind_of_well_formed_constraint"
+reason = "checks that a valid model of each constraint kind, of the objective, of the strategies and of the hint gets no error"
+
+[[file.added]]
+name = "validate_input_cp_model_checks_the_floating_point_objective"
+reason = "upstream has no case for ValidateInputCpModel; checks each error of the floating point objective and its valid form"
+
+[[file.added]]
+name = "possible_integer_overflow_sets_the_implied_domain_and_rejects_large_terms"
+reason = "upstream has no case for PossibleIntegerOverflow; checks the implied domain and each rejection"
+
+[[file.added]]
+name = "possible_integer_overflow_dies_on_a_negated_reference"
+reason = "checks the CHECK on a positive reference"
+
+[[file.added]]
+name = "linear_overflow_checker_sums_the_extreme_terms_and_stops_at_half_the_range"
+reason = "upstream has no case for LinearOverflowChecker; checks the sums and the rejections"
+
+[[file.added]]
+name = "six_digits_to_string_prints_like_percent_g"
+reason = "checks the port of absl::StrCat on a double, which no upstream case reaches"
 
 # sat/util is ported in part: the Diophantine equation functions that sat/cp_model_checker calls,
 # with the modular functions they use. Each upstream case that needs another item is a pending line.
