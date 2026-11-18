@@ -9,11 +9,12 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
+// limitations under the License.
 //
 // Ported from ortools/sat/integer_base.h at commit c931f5f7. Changed: translated from C++ to Rust.
 
 use cpsat_util::define_strong_int64_type;
-use cpsat_util::saturated_arithmetic::{cap_prod, cap_sub};
+use cpsat_util::saturated_arithmetic::{self, cap_prod, cap_sub};
 
 // Value type of an integer variable. An integer variable is always bounded
 // on both sides, and this type is also used to store the bounds [lb, ub] of the
@@ -46,31 +47,44 @@ pub fn cap_sub_i(a: IntegerValue, b: IntegerValue) -> IntegerValue {
 
 // Computes *result = a * b, and returns true iff there is an overflow or if
 // the result is kint64min.
-pub fn mul_into_overflow(_a: IntegerValue, _b: IntegerValue, _result: &mut IntegerValue) -> bool {
-    unimplemented!("phase 2: sat/integer_base.h")
+pub fn mul_into_overflow(a: IntegerValue, b: IntegerValue, result: &mut IntegerValue) -> bool {
+    let mut product: i64 = 0;
+    let overflow = saturated_arithmetic::mul_into_overflow(a.value(), b.value(), &mut product);
+    *result = IntegerValue::new(product);
+    overflow
 }
 
 // Returns true iff t * value overflows or is kint64min.
-pub fn prod_overflow(_t: IntegerValue, _value: IntegerValue) -> bool {
-    unimplemented!("phase 2: sat/integer_base.h")
+pub fn prod_overflow(t: IntegerValue, value: IntegerValue) -> bool {
+    let mut prod = IntegerValue::new(0);
+    mul_into_overflow(t, value, &mut prod)
 }
 
 // Computes *result += a, and returns false iff there is an overflow or if the
 // result is kint64min.
-pub fn add_to(_a: IntegerValue, _result: &mut IntegerValue) -> bool {
-    unimplemented!("phase 2: sat/integer_base.h")
+pub fn add_to(a: IntegerValue, result: &mut IntegerValue) -> bool {
+    let mut add: i64 = result.value();
+    if saturated_arithmetic::add_into_overflow(a.value(), &mut add) || add == i64::MIN {
+        return false;
+    }
+    *result = IntegerValue::new(add);
+    true
 }
 
 // Computes *result += a * b, and returns false iff a * b or the final result
 // overflows int64_t or equals kint64min.
-pub fn add_product_to(_a: IntegerValue, _b: IntegerValue, _result: &mut IntegerValue) -> bool {
-    unimplemented!("phase 2: sat/integer_base.h")
+pub fn add_product_to(a: IntegerValue, b: IntegerValue, result: &mut IntegerValue) -> bool {
+    let mut prod = IntegerValue::new(0);
+    if mul_into_overflow(a, b, &mut prod) {
+        return false;
+    }
+    add_to(prod, result)
 }
 
 // Computes *result += a * a, and returns false iff a * a or the final result
 // overflows int64_t or equals kint64min.
-pub fn add_square_to(_a: IntegerValue, _result: &mut IntegerValue) -> bool {
-    unimplemented!("phase 2: sat/integer_base.h")
+pub fn add_square_to(a: IntegerValue, result: &mut IntegerValue) -> bool {
+    add_product_to(a, a, result)
 }
 
 #[cfg(test)]
@@ -84,7 +98,6 @@ mod tests {
     // PENDING(phase 2): TEST(LinearExpression2Test, GetDifferenceLowerBound), needs sat/integer_base.h
 
     #[test]
-    #[ignore = "phase 2: sat/integer_base.h"]
     fn integer_base_overflow_test_mul_and_add_overflow_helpers() {
         const K_MIN: i64 = i64::MIN;
         const K_MAX: i64 = i64::MAX;

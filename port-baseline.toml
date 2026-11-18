@@ -410,8 +410,8 @@ reason = "checks the kind of every constraint, the Rust form of the generated co
 name = "canonicalize_lin_max_of_another_constraint_dies_in_debug_and_switches_in_release"
 reason = "checks the DCHECK in debug and the switch of the oneof in release"
 
-# sat/integer_base is ported in part: IntegerValue, its limits and the two capped functions that
-# sat/diffn_util calls. The overflow helpers are stubs that the one case without a new type needs.
+# sat/integer_base is ported in part: IntegerValue, its limits, the two capped functions that
+# sat/diffn_util calls and the overflow helpers.
 [[file]]
 upstream = "sat/integer_base_test.cc"
 rust = "crates/sat/src/integer_base.rs"
@@ -419,7 +419,6 @@ binary = "cpsat_sat"
 module = "integer_base::tests"
 upstream_cases = 6
 pending = 5
-ignored = 1
 
 [[file.added]]
 name = "integer_value_arithmetic_and_ordering_equal_those_of_the_inner_integers"

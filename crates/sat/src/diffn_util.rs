@@ -9,6 +9,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
+// limitations under the License.
 //
 // Ported from ortools/sat/diffn_util.h at commit c931f5f7. Changed: translated from C++ to Rust.
 // Ported from ortools/sat/diffn_util.cc at commit c931f5f7. Changed: translated from C++ to Rust.
@@ -287,6 +288,9 @@ pub fn find_partial_rectangle_intersections(_rectangles: &[Rectangle]) -> Vec<(i
 // This function is faster than FindPartialRectangleIntersections() if one
 // only wants to know if there is at least one intersection. It is in
 // O(N log N).
+//
+// The interval set is a sorted Vec here, where upstream has a btree_set, so
+// an insert or a removal is O(N) and the worst case is O(N^2).
 //
 // IMPORTANT: this assumes rectangles are already sorted by their x_min and does
 // not support degenerate rectangles with zero area.
@@ -1014,9 +1018,8 @@ mod tests {
 
     // The upstream cases of the two intersection functions draw their input from
     // the generators of sat/2d_orthogonal_packing_testing.h. The cases below use
-    // fixed rectangles, the shapes of FindPartialIntersections.Simple and of
-    // RectangleTest.LineAndPointWorksTest. The expected pairs are what the
-    // reference build returns for the same input.
+    // fixed rectangles. The expected pairs are what the reference build returns
+    // for the same input.
 
     #[test]
     fn find_one_intersection_reports_two_overlapping_rectangles() {

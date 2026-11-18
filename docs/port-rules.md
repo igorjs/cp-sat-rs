@@ -365,7 +365,7 @@ pub fn multiplication_by(&self, coeff: i64, exact: Option<&mut bool>) -> Domain
 
 ## 24. `std::set` positions and `LOG(DFATAL)`
 
-A `std::set` that hands out iterators is a sorted `Vec` and an iterator is the `usize` position, since stable Rust has no cursor on a `BTreeSet`. `LOG(DFATAL)` is `panic!` in a debug build and `log::error!` in an optimised build. `DLOG_IF(DFATAL, c)` is `debug_assert!`, which is silent in an optimised build as `DLOG_IF` is.
+A `std::set` or an `absl::btree_set` that hands out iterators is a sorted `Vec` and an iterator is the `usize` position, since stable Rust has no cursor on a `BTreeSet`. `LOG(DFATAL)` is `panic!` in a debug build and `log::error!` in an optimised build. `DLOG_IF(DFATAL, c)` is `debug_assert!`, which is silent in an optimised build as `DLOG_IF` is.
 
 ```cpp
 auto result = intervals_.insert({start, end});   // util/sorted_interval_list.cc:975
@@ -472,7 +472,7 @@ A C++ template over struct types that share member names (`RectangleT::x_min`) i
 ```cpp
 template <typename RectangleT>
 std::optional<std::pair<int, int>> FindOneIntersectionIfPresentImpl(absl::Span<const RectangleT> rectangles, ...);   // sat/diffn_util.cc:2287
-absl::Span<int> FilterBoxesThatAreTooLarge(absl::Span<const Rectangle> cached_rectangles, absl::Span<const IntegerValue> energies, absl::Span<int> boxes);   // sat/diffn_util.h
+absl::Span<int> FilterBoxesThatAreTooLarge(absl::Span<const Rectangle> cached_rectangles, absl::Span<const IntegerValue> energies, absl::Span<int> boxes);   // sat/diffn_util.h:199
 ```
 
 ```rust
