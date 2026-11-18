@@ -65,6 +65,17 @@ upstream_cases = 17
 name = "cap_functions_equal_the_clamped_i128_result"
 reason = "property test: cap_add, cap_sub and cap_prod equal the i128 result clamped to the i64 range, on random and corner pairs"
 
+# The two typed tests of util/bitset_test.cc run once for each of 10 types, so the port has 18 more
+# tests than upstream has cases. The three death tests exist in debug builds only.
+[[file]]
+upstream = "util/bitset_test.cc"
+rust = "crates/util/src/bitset.rs"
+binary = "cpsat_util"
+module = "bitset::tests"
+upstream_cases = 38
+typed_additions = 18
+debug_only = 3
+
 # util/strong_integers has no upstream test file, so every test here is an added test.
 [[file]]
 upstream = "util/strong_integers.h"
