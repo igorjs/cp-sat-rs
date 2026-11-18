@@ -102,6 +102,26 @@ name = "incrementing_the_largest_values_panics"
 reason = "checks that increment and += panic on overflow for both macros"
 
 [[file.added]]
+name = "decrementing_the_smallest_values_panics"
+reason = "checks that decrement and -= panic at the minimum for both macros"
+
+[[file.added]]
+name = "subtracting_past_the_smallest_values_panics"
+reason = "checks that - panics past the minimum for both macros"
+
+[[file.added]]
+name = "multiplying_past_the_largest_values_panics"
+reason = "checks that * panics on overflow for both macros"
+
+[[file.added]]
+name = "dividing_the_smallest_int64_value_by_minus_one_panics"
+reason = "checks that i64::MIN / -1 panics on overflow"
+
+[[file.added]]
+name = "shifting_left_keeps_the_bits_that_fit"
+reason = "pins that << on MAX wraps without a panic, as C++20 defines it"
+
+[[file.added]]
 name = "negating_the_smallest_int64_value_panics"
 reason = "checks that the unary minus panics on overflow"
 

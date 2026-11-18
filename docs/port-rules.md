@@ -280,10 +280,10 @@ pub fn cap_or_float_add<T: CapOrFloatAdd>(x: T, y: T) -> T {
 
 ## 18. Operators of strong integer types
 
-The macros of rule 4 give each type the operators of the C++ class, with the type or its integer on either side. A C++ operator that has no Rust operator is a method: `x++` is `x.post_increment()`, `++x` is `x.pre_increment()`, `x--` and `--x` likewise, and `+x` is `x.unary_plus()`. `numeric_limits<T>::min()`, `lowest()` and `max()` are the constants `T::MIN` and `T::MAX`. The accessor `value<ValType>()` is `value()` and an `as` cast.
+The macros of rule 4 give each type the operators of the C++ class, with the type or its integer on either side, except that a compound assignment takes the type or the integer on the right only, never an integer on the left (`util/strong_integers.h:104`). `<<` on a strong type keeps the bits that fit, as C++20 does for signed types, and panics only for a shift amount at or above the bit width. A C++ operator that has no Rust operator is a method: `x++` is `x.post_increment()`, `++x` is `x.pre_increment()`, `x--` and `--x` likewise, and `+x` is `x.unary_plus()`. `numeric_limits<T>::min()`, `lowest()` and `max()` are the constants `T::MIN` and `T::MAX`. The accessor `value<ValType>()` is `value()` and an `as` cast.
 
 ```cpp
-const ThisType operator++(int);   // util/strong_integers.h:117
+const ThisType operator++(int);   // util/strong_integers.h:114
 ```
 
 ```rust

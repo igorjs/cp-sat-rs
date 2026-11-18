@@ -29,6 +29,26 @@
 //! fn takes_cost(_: Cost) {}
 //! takes_cost(Weight::new(1));
 //! ```
+//!
+//! The types may be public and carry attributes:
+//!
+//! ```
+//! use cpsat_util::{define_strong_index_type, define_strong_int64_type};
+//!
+//! fn main() {
+//!     define_strong_index_type!(
+//!         /// A position in a list.
+//!         pub Position
+//!     );
+//!     define_strong_int64_type!(
+//!         /// An amount of money.
+//!         pub Cents
+//!     );
+//!
+//!     assert_eq!(Position::new(2) + 3, Position::new(5));
+//!     assert_eq!((Cents::new(10) * 4).value(), 40);
+//! }
+//! ```
 
 /// Makes `$name`, one operator on two values of the type and on the type with its integer on
 /// either side, as `STRONG_TYPE_ARITHMETIC_OP` does.
@@ -110,7 +130,8 @@ macro_rules! strong_type_comparison_ops {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! strong_type_common {
-    ($vis:vis $name:ident, $int:ty) => {
+    ($(#[$meta:meta])* $vis:vis $name:ident, $int:ty) => {
+        $(#[$meta])*
         #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         $vis struct $name($int);
 
@@ -194,10 +215,11 @@ macro_rules! strong_type_common {
 ///
 /// It supports `+=` and `-=`, `+`, `-`, `*` and `%` with its own type and with an `i32` on
 /// either side, the unary `-`, the comparisons, and the increment and decrement methods.
+/// Attributes, such as a doc comment, may come before the visibility.
 #[macro_export]
 macro_rules! define_strong_index_type {
-    ($vis:vis $name:ident) => {
-        $crate::strong_type_common!($vis $name, i32);
+    ($(#[$meta:meta])* $vis:vis $name:ident) => {
+        $crate::strong_type_common!($(#[$meta])* $vis $name, i32);
 
         $crate::strong_assignment_op!($name, i32, AddAssign, add_assign, +=);
         $crate::strong_assignment_op!($name, i32, SubAssign, sub_assign, -=);
@@ -213,11 +235,13 @@ macro_rules! define_strong_index_type {
 ///
 /// It supports every integer operator with its own type and with an `i64` on either side,
 /// the unary `-` and `!`, the comparisons, `mutable_value`, and the increment and decrement
-/// methods. The type implements `StrongInt64` of `saturated_arithmetic`.
+/// methods. The type implements `StrongInt64` of `saturated_arithmetic`. `<<` keeps the bits
+/// that fit, as C++20 does for signed types, and panics only for a shift amount at or above
+/// the bit width. Attributes, such as a doc comment, may come before the visibility.
 #[macro_export]
 macro_rules! define_strong_int64_type {
-    ($vis:vis $name:ident) => {
-        $crate::strong_type_common!($vis $name, i64);
+    ($(#[$meta:meta])* $vis:vis $name:ident) => {
+        $crate::strong_type_common!($(#[$meta])* $vis $name, i64);
 
         #[allow(dead_code)]
         impl $name {
@@ -400,6 +424,91 @@ mod tests {
         );
         expect_death(|| index += 1, "overflow");
         expect_death(|| int64 += 1, "overflow");
+    }
+
+    #[test]
+    fn decrementing_the_smallest_values_panics() {
+        // Arrange
+        let mut index = TestIndex::MIN;
+        let mut int64 = TestInt::MIN;
+        // Act and Assert
+        expect_death(
+            || {
+                let _ = index.post_decrement();
+            },
+            "overflow",
+        );
+        expect_death(
+            || {
+                let _ = int64.pre_decrement();
+            },
+            "overflow",
+        );
+        expect_death(|| index -= 1, "overflow");
+        expect_death(|| int64 -= 1, "overflow");
+    }
+
+    #[test]
+    fn subtracting_past_the_smallest_values_panics() {
+        // Arrange
+        let index = TestIndex::MIN;
+        let int64 = TestInt::MIN;
+        // Act and Assert
+        expect_death(
+            || {
+                let _ = index - 1;
+            },
+            "overflow",
+        );
+        expect_death(
+            || {
+                let _ = int64 - TestInt::new(1);
+            },
+            "overflow",
+        );
+    }
+
+    #[test]
+    fn multiplying_past_the_largest_values_panics() {
+        // Arrange
+        let index = TestIndex::MAX;
+        let int64 = TestInt::MAX;
+        // Act and Assert
+        expect_death(
+            || {
+                let _ = index * 2;
+            },
+            "overflow",
+        );
+        expect_death(
+            || {
+                let _ = int64 * TestInt::new(2);
+            },
+            "overflow",
+        );
+    }
+
+    #[test]
+    fn dividing_the_smallest_int64_value_by_minus_one_panics() {
+        // Arrange
+        let smallest = TestInt::MIN;
+        // Act and Assert
+        expect_death(
+            || {
+                let _ = smallest / -1;
+            },
+            "overflow",
+        );
+    }
+
+    #[test]
+    fn shifting_left_keeps_the_bits_that_fit() {
+        // Arrange
+        let largest = TestInt::MAX;
+        // Act
+        let shifted = largest << 1;
+        // Assert
+        assert_eq!(shifted, TestInt::new(-2));
     }
 
     #[test]
