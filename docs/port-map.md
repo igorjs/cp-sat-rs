@@ -299,7 +299,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/lrat_proof_handler.h` | 306 | `sat/lrat_proof_handler_test.cc` | 1 | `sat/lrat_checker.h`, `sat/model.h`, `sat/recordio.h`, `sat/sat_clause.h`, `sat/sat_literal.h`, `sat/synchronization.h`, `util/strong_integers.h` | 5 | - | todo |
 | sat | `sat/max_hs.cc` | 687 | none | - | `base/strong_vector.h`, `sat/cp_model_mapping.h`, `sat/cp_model_utils.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/integer_search.h`, `sat/linear_constraint.h`, `sat/linear_relaxation.h`, `sat/max_hs.h`, `sat/model.h`, `sat/optimization.h`, `sat/presolve_util.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/synchronization.h`, `sat/util.h`, `util/strong_integers.h`, `util/time_limit.h` | 18 | - | todo |
 | sat | `sat/max_hs.h` | 197 | none | - | `base/strong_vector.h`, `sat/cp_model_mapping.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/linear_constraint.h`, `sat/linear_relaxation.h`, `sat/model.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/synchronization.h`, `sat/util.h`, `util/time_limit.h` | 14 | - | todo |
-| sat | `sat/model.h` | 253 | `sat/model_test.cc` | 5 | - | 0 | 0 | todo |
+| sat | `sat/model.h` | 253 | `sat/model_test.cc` | 5 | - | 0 | 0 | done |
 | sat | `sat/mp_model_wrapper.cc` | 187 | none | - | `sat/mp_model_wrapper.h`, `util/logging.h` | 4 | - | todo |
 | sat | `sat/mp_model_wrapper.h` | 196 | none | - | `util/logging.h` | 3 | - | todo |
 | sat | `sat/no_overlap_2d_helper.cc` | 477 | none | - | `base/log_severity.h`, `sat/2d_rectangle_presolve.h`, `sat/debug_solution.h`, `sat/diffn_util.h`, `sat/enforcement.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/no_overlap_2d_helper.h`, `sat/sat_literal.h`, `sat/scheduling_helpers.h`, `sat/util.h` | 15 | - | todo |

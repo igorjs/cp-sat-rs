@@ -202,3 +202,32 @@ module = "sorted_interval_list::tests"
 upstream_cases = 74
 debug_only = 1
 release_only = 1
+
+# sat/model_test.cc: the two death cases are one expect_death call each. The four tests of the
+# form of the container and the one on creation inside a constructor are added.
+[[file]]
+upstream = "sat/model_test.cc"
+rust = "crates/sat/src/model.rs"
+binary = "cpsat_sat"
+module = "model::tests"
+upstream_cases = 5
+
+[[file.added]]
+name = "a_component_reads_another_through_its_handle"
+reason = "upstream has no such case; proves the form of the container for a component that reads another"
+
+[[file.added]]
+name = "a_component_mutates_another_through_its_handle"
+reason = "proves the form of the container for a component that writes another"
+
+[[file.added]]
+name = "two_components_hold_handles_to_each_other"
+reason = "proves that two components can point to each other without a cycle that leaks"
+
+[[file.added]]
+name = "a_trail_calls_trait_object_propagators_with_mutable_access_to_itself"
+reason = "proves the shape the SAT core uses: a trail that calls propagators through trait objects"
+
+[[file.added]]
+name = "a_component_made_inside_the_constructor_of_another_exists_once"
+reason = "checks that a component created from the constructor of another is the singleton of the model"

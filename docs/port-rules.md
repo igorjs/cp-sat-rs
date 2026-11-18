@@ -57,18 +57,40 @@ DEFINE_STRONG_INDEX_TYPE(BooleanVariable);   // sat/sat_literal.h
 define_strong_index_type!(BooleanVariable);
 ```
 
-## 5. Shared solver state (provisional)
+## 5. Shared solver state
 
-This rule is provisional until `sat/model.h` is ported. The pull request that ports it replaces this section with the confirmed form.
+Upstream, every component is fetched from one `Model` by its type and keeps raw pointers to other components for its whole life, and several components may call each other while one of them is running. The Rust form is `crates/sat/src/model.rs`:
 
-Upstream, every component is fetched from one `Model` and keeps raw pointers to other components for its whole life. In Rust a component is fetched from the `Model` by its type, and one component holds a handle or an index to another, never a long-lived `&` or `&mut`. A borrow of another component lasts for one call.
+- A component type implements `Component`. `Component::new(model: &Model)` is the constructor `T(Model* model)`, or `T()` when the model is not used. `Model` methods take `&self`, so a constructor can call `model.get_or_create` for the components it needs.
+- `get_or_create`, `create`, `take_ownership` and `register` give an `Rc<RefCell<T>>`. The model owns it and drops its components in reverse order of creation, as upstream.
+- A field that holds another component is a `Handle<T>`, never a `&` or `&mut` and never an `Rc`. A `Handle` is a `Weak`, so two components that point to each other leave no cycle. `handle.get()` gives the `Rc`, and the caller borrows for one call: `handle.get().borrow_mut().x = 1`. The component that runs a call with `&mut` access to another passes it as an argument and does not borrow it again through a handle, since a second borrow panics.
+- A constructor that hands `this` to another component (`sat/integer.h:558`) does it in `Component::after_create`, which runs once the object is in the model.
+- A component called through a trait object is held as `Rc<RefCell<dyn Trait>>`, made by coercing the `Rc` of the concrete type. A trail that calls its propagators clones the `Rc` of one propagator, then calls it with `&mut self` as the argument.
 
 ```cpp
-auto* trail = model->GetOrCreate<Trail>();
+explicit IntegerTrail(Model* model)                          // sat/integer.h:549
+    : trail_(model->GetOrCreate<Trail>()),                   // sat/integer.h:554
+      sat_solver_(model->GetOrCreate<SatSolver>()) {         // sat/integer.h:555
+  model->GetOrCreate<SatSolver>()->AddPropagator(this);      // sat/integer.h:558
+}
+Trail* trail_;                                               // a member, as in sat/integer.h:1306
 ```
 
 ```rust
-let trail = model.get_or_create::<Trail>();
+impl Component for IntegerTrail {
+    fn new(model: &Model) -> Self {
+        IntegerTrail {
+            trail: Handle::new(&model.get_or_create::<Trail>()),
+            sat_solver: Handle::new(&model.get_or_create::<SatSolver>()),
+        }
+    }
+    fn after_create(this: &Rc<RefCell<Self>>, model: &Model) {
+        model.get_or_create::<SatSolver>().borrow_mut().add_propagator(this.clone());
+    }
+}
+trail: Handle<Trail>,
+// use:
+self.trail.get().borrow_mut().enqueue(literal);
 ```
 
 ## 6. Hash containers
