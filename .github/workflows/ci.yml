@@ -139,6 +139,10 @@ jobs:
         run: cargo xtask port-map
       - if: hashFiles('xtask/Cargo.toml') != ''
         run: git diff --exit-code docs/port-map.md
+      - if: hashFiles('crates/difftest/Cargo.toml') != ''
+        run: cargo test -p cpsat-difftest --features reference -j 4
+      - if: hashFiles('crates/difftest/Cargo.toml') != ''
+        run: cargo run -p cpsat-difftest --features reference --bin capture -j 4 -- --check
       # Saves a finished build even when the job is cancelled afterwards.
       - if: always() && steps.reference-cache.outputs.cache-hit != 'true' && hashFiles('.reference/.reference-commit') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

@@ -1,0 +1,29 @@
+[package]
+name = "cpsat-difftest"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "cpsat_difftest"
+
+[features]
+# Links the C++ reference solver found through REFERENCE_PREFIX.
+reference = ["dep:cxx", "dep:cxx-build"]
+
+[[bin]]
+name = "capture"
+path = "src/bin/capture.rs"
+required-features = ["reference"]
+
+[dependencies]
+cxx = { workspace = true, optional = true }
+
+[build-dependencies]
+cxx-build = { workspace = true, optional = true }
+
+[dev-dependencies]
+cpsat-proto = { path = "../proto" }
+prost.workspace = true

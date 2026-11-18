@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/proto", "xtask"]
+members = ["crates/difftest", "crates/proto", "xtask"]
 exclude = ["xtask/tests/fixtures"]
 
 [workspace.package]
@@ -12,6 +12,8 @@ license = "Apache-2.0"
 overflow-checks = true
 
 [workspace.dependencies]
+cxx = "=1.0.205"
+cxx-build = "=1.0.205"
 prost = "=0.14.4"
 prost-build = "=0.14.4"
 protox = "=0.10.0"
