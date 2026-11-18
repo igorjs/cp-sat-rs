@@ -6,7 +6,11 @@
 # This build is expensive: it compiles OR-Tools and its dependencies from
 # source. It does nothing when the prefix already holds this commit.
 #
+# Needs CMake, a C++20 compiler and the bzip2 development files.
+#
 # Environment:
+#   UPSTREAM_LOCK        lock file to read (default: upstream.lock in the repo root)
+#   UPSTREAM_DIR         checked source (default: upstream/ in the repo root)
 #   REFERENCE_PREFIX     install directory
 #                        (default: ~/.cache/cp-sat-rs/reference/<commit>)
 #   REFERENCE_BUILD_DIR  CMake build directory
@@ -18,12 +22,23 @@ readonly DEFAULT_JOBS=4
 readonly STAMP_NAME=.reference-commit
 readonly CACHE_ROOT="$HOME/.cache/cp-sat-rs"
 
-# CP-SAT is part of the core library, which has no switch. Every wrapper,
-# optional component and other solver that has a switch is off.
+# CP-SAT is part of the core library, which has no switch. Every wrapper and
+# optional component is off, and so is every other solver except BOP and GLOP,
+# which upstream does not support turning off.
+#
+# BUILD_DEPS=ON would build bzip2 from its moving master branch, so each
+# dependency is chosen by name: the ones upstream pins by tag are built, and
+# bzip2 comes from the system.
 readonly CMAKE_OPTIONS=(
   -DCMAKE_BUILD_TYPE=Release
   -DBUILD_SHARED_LIBS=ON
-  -DBUILD_DEPS=ON
+  -DBUILD_DEPS=OFF
+  -DBUILD_ZLIB=ON
+  -DBUILD_absl=ON
+  -DBUILD_Protobuf=ON
+  -DBUILD_re2=ON
+  -DBUILD_Eigen3=ON
+  -DBUILD_BZip2=OFF
   -DCMAKE_INSTALL_LIBDIR=lib
   -DBUILD_PYTHON=OFF
   -DBUILD_JAVA=OFF
@@ -48,8 +63,8 @@ readonly CMAKE_OPTIONS=(
 )
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-lock_file="$repo_root/upstream.lock"
-source_dir="$repo_root/upstream"
+lock_file="${UPSTREAM_LOCK:-$repo_root/upstream.lock}"
+source_dir="${UPSTREAM_DIR:-$repo_root/upstream}"
 
 log() {
   printf 'build-reference: %s\n' "$*" >&2

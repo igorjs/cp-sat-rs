@@ -95,8 +95,10 @@ jobs:
   # Builds OR-Tools at the pinned commit. A pull request cannot read a cache
   # another pull request saved, so this job also runs on main, whose cache every
   # pull request can read.
+  # The runner image is pinned because the cached library links against its
+  # system libraries.
   reference:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       REFERENCE_PREFIX: ${{ github.workspace }}/.reference
@@ -108,9 +110,10 @@ jobs:
         with:
           path: .reference
           key: reference-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('upstream.lock', 'scripts/build-reference.sh') }}
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install --yes libbz2-dev
       - run: scripts/build-reference.sh
-      # Placed straight after the build, and run even when a later step fails,
-      # so one finished build is never built twice.
+      # Saves a finished build even when the job is cancelled afterwards.
       - if: always() && steps.reference-cache.outputs.cache-hit != 'true' && hashFiles('.reference/.reference-commit') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
