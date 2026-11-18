@@ -10,6 +10,7 @@ publish = false
 name = "cpsat_sat"
 
 [dependencies]
+cpsat-proto = { path = "../proto" }
 cpsat-util = { path = "../util" }
 
 [dev-dependencies]

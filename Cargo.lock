@@ -138,6 +138,7 @@ dependencies = [
 name = "cpsat-sat"
 version = "0.0.0"
 dependencies = [
+ "cpsat-proto",
  "cpsat-testutil",
  "cpsat-util",
 ]

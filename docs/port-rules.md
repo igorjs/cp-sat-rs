@@ -391,3 +391,47 @@ inline std::ostream& operator<<(std::ostream& os, absl::Span<const Literal> lite
 pub const K_NO_LITERAL_INDEX: LiteralIndex = LiteralIndex::new(-1);
 pub fn format_literals(literals: &[Literal]) -> String
 ```
+
+## 26. Protobuf messages
+
+A generated C++ message is the `prost` struct of `cpsat-proto`. A repeated field is a `Vec` and `x_size()` is `x.len()`. A singular message field is an `Option`: `has_x()` is `x.is_some()`, the const getter of an unset field is the empty default message (a `match` or `if let` that skips the case), and `mutable_x()` is `x.get_or_insert_default()`, which creates the field as C++ does. A `oneof` is the `Option` of the generated enum, matched in the order of the C++ `switch`. `Clear()` is `*message = Default::default()`.
+
+```cpp
+if (proto->has_target()) f(proto->mutable_target());   // sat/cp_model_utils.cc:524
+for (int& r : *ct->mutable_enforcement_literal()) f(&r);   // sat/cp_model_utils.cc:268
+```
+
+```rust
+if let Some(target) = &mut proto.target { f(target); }
+for r in &mut ct.enforcement_literal { f(r); }
+```
+
+## 27. Function references and default values
+
+`absl::FunctionRef<void(T)>` is a generic parameter `impl FnMut(T)`, taken by value. A default argument that has a value is an explicit parameter, and the caller writes the default. A C++ name that is a Rust keyword takes a trailing underscore (`Const` is `const_`).
+
+```cpp
+int64_t LinearExpressionGcd(const LinearExpressionProto& expr, int64_t gcd = 0);   // sat/cp_model_utils.h:170
+static constexpr AffineExpr Const(int64_t cst);   // sat/cp_model_utils.h:105
+```
+
+```rust
+pub fn linear_expression_gcd(expr: &LinearExpressionProto, gcd: i64) -> i64
+pub const fn const_(cst: i64) -> AffineExpr
+```
+
+## 28. Flags
+
+An `ABSL_FLAG` is a `pub static` named in `SCREAMING_SNAKE_CASE` with the prefix of the flag kept: an `AtomicBool` for a bool, and a `LazyLock<Mutex<String>>` for a string with a non-const default. Nothing parses a command line in the port, so a flag changes only when code stores to it.
+
+```cpp
+ABSL_FLAG(bool, cp_model_dump_models, false, "...");   // sat/cp_model_utils.cc:45
+```
+
+```rust
+pub static CP_MODEL_DUMP_MODELS: AtomicBool = AtomicBool::new(false);
+```
+
+## 29. Staged ports of a long file
+
+A file over 2,000 lines goes out in several pull requests, one for each function group. A test case whose function belongs to a later group is one `// PENDING(phase 1): TEST(Suite, Name), needs the Nth group of <upstream file>` line at its upstream position, and the baseline counts it in `pending`. The phase is 1 because the check rejects a pending line at or below the current phase; the last pull request of the file leaves no pending line, and no stub stands in for a later function.
