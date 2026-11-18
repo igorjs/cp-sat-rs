@@ -139,6 +139,7 @@ name = "cpsat-sat"
 version = "0.0.0"
 dependencies = [
  "cpsat-base",
+ "cpsat-port",
  "cpsat-proto",
  "cpsat-testutil",
  "cpsat-util",

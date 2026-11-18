@@ -17,7 +17,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | Phase | Ignored tests | Pending lines |
 |---|---|---|
 | 0 | 0 | 0 |
-| 1 | 0 | 0 |
+| 1 | 0 | 60 |
 | 2 | 7 | 23 |
 | 3 | 0 | 0 |
 | 4 | 0 | 61 |
@@ -193,8 +193,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/cp_constraints.h` | 179 | `sat/cp_constraints_test.cc` | 4 | `sat/enforcement.h`, `sat/enforcement_helper.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/sat_literal.h`, `sat/sat_trail.h` | 10 | - | todo |
 | sat | `sat/cp_model.cc` | 1639 | `sat/cp_model_test.cc` | 80 | `base/types.h`, `sat/cp_model.h`, `sat/cp_model_utils.h`, `util/sorted_interval_list.h` | 5 | - | todo |
 | sat | `sat/cp_model.h` | 1484 | `sat/cp_model_test.cc` | 80 | `base/types.h`, `sat/cp_model_solver.h`, `sat/cp_model_utils.h`, `sat/model.h`, `util/sorted_interval_list.h` | 4 | - | todo |
-| sat | `sat/cp_model_checker.cc` | 2107 | `sat/cp_model_checker_test.cc` | 47 | `base/types.h`, `port/proto_utils.h`, `sat/cp_model_checker.h`, `sat/cp_model_utils.h`, `sat/diffn_util.h`, `sat/primary_variables.h`, `sat/util.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 14 | 0 | todo |
-| sat | `sat/cp_model_checker.h` | 96 | `sat/cp_model_checker_test.cc` | 47 | - | 0 | 0 | todo |
+| sat | `sat/cp_model_checker.cc` | 2107 | `sat/cp_model_checker_test.cc` | 47 | `base/types.h`, `port/proto_utils.h`, `sat/cp_model_checker.h`, `sat/cp_model_utils.h`, `sat/diffn_util.h`, `sat/primary_variables.h`, `sat/util.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 14 | 0 | done |
+| sat | `sat/cp_model_checker.h` | 96 | `sat/cp_model_checker_test.cc` | 47 | - | 0 | 0 | done |
 | sat | `sat/cp_model_copy.cc` | 2675 | `sat/cp_model_copy_test.cc` | 29 | `base/macros/os_support.h`, `base/protobuf_util.h`, `base/stl_util.h`, `base/types.h`, `sat/cp_model_copy.h`, `sat/cp_model_utils.h`, `sat/lrat_proof_handler.h`, `sat/model.h`, `sat/sat_clause.h`, `sat/sat_literal.h`, `sat/synchronization.h`, `util/logging.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/time_limit.h` | 16 | - | todo |
 | sat | `sat/cp_model_copy.h` | 625 | `sat/cp_model_copy_test.cc` | 29 | `base/types.h`, `sat/cp_model_utils.h`, `sat/lrat_proof_handler.h`, `sat/model.h`, `sat/sat_clause.h`, `sat/sat_literal.h`, `sat/solution_crush.h`, `sat/synchronization.h`, `util/bitset.h`, `util/logging.h`, `util/sorted_interval_list.h`, `util/strong_integers.h` | 15 | - | todo |
 | sat | `sat/cp_model_copy_benchmark.cc` | 1535 | none | - | `sat/cp_model_copy.h`, `sat/cp_model_utils.h`, `sat/model.h`, `sat/synchronization.h` | 16 | - | todo |
@@ -384,8 +384,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/timetable.h` | 238 | `sat/timetable_test.cc` | 17 | `sat/enforcement.h`, `sat/enforcement_helper.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/sat_assignment.h`, `sat/sat_literal.h`, `sat/scheduling_helpers.h`, `sat/synchronization.h`, `sat/util.h`, `util/strong_integers.h` | 13 | - | todo |
 | sat | `sat/timetable_edgefinding.cc` | 437 | none | - | `base/iterator_adaptors.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/scheduling_helpers.h`, `sat/timetable_edgefinding.h`, `util/strong_integers.h` | 17 | - | todo |
 | sat | `sat/timetable_edgefinding.h` | 126 | none | - | `sat/integer.h`, `sat/integer_base.h`, `sat/intervals.h`, `sat/model.h`, `sat/scheduling_helpers.h` | 16 | - | todo |
-| sat | `sat/util.cc` | 1105 | `sat/util_test.cc` | 66 | `base/log_severity.h`, `base/macros/os_support.h`, `base/mathutil.h`, `base/types.h`, `sat/sat_literal.h`, `sat/util.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 3 | - | todo |
-| sat | `sat/util.h` | 1807 | `sat/util_test.cc` | 66 | `base/types.h`, `sat/model.h`, `sat/sat_literal.h`, `util/bitset.h`, `util/random_engine.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/time_limit.h` | 2 | - | todo |
+| sat | `sat/util.cc` | 1105 | `sat/util_test.cc` | 66 | `base/log_severity.h`, `base/macros/os_support.h`, `base/mathutil.h`, `base/types.h`, `sat/sat_literal.h`, `sat/util.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 3 | - | partial |
+| sat | `sat/util.h` | 1807 | `sat/util_test.cc` | 66 | `base/types.h`, `sat/model.h`, `sat/sat_literal.h`, `util/bitset.h`, `util/random_engine.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/time_limit.h` | 2 | - | partial |
 | sat | `sat/util_benchmark.cc` | 69 | none | - | `sat/util.h`, `util/random_engine.h` | 3 | - | todo |
 | sat | `sat/var_domination.cc` | 2100 | `sat/var_domination_test.cc` | 27 | `algorithms/dynamic_partition.h`, `base/hash.h`, `base/log_severity.h`, `base/mathutil.h`, `base/stl_util.h`, `base/strong_vector.h`, `base/types.h`, `sat/cp_model_utils.h`, `sat/integer_base.h`, `sat/presolve_context.h`, `sat/presolve_util.h`, `sat/solution_crush.h`, `sat/util.h`, `sat/var_domination.h`, `util/affine_relation.h`, `util/bitset.h`, `util/logging.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/strong_integers.h` | 17 | - | todo |
 | sat | `sat/var_domination.h` | 305 | `sat/var_domination_test.cc` | 27 | `algorithms/dynamic_partition.h`, `base/strong_vector.h`, `sat/cp_model_utils.h`, `sat/integer_base.h`, `sat/presolve_context.h` | 16 | - | todo |
