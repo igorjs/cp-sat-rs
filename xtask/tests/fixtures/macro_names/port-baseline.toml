@@ -1,0 +1,8 @@
+phase = 0
+
+[[file]]
+upstream = "util/saturated_arithmetic_test.cc"
+rust = "src/lib.rs"
+binary = "fx"
+upstream_cases = 3
+pending = 1

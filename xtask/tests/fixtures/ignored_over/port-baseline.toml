@@ -1,0 +1,9 @@
+phase = 0
+
+[[file]]
+upstream = "sat/model_test.cc"
+rust = "src/lib.rs"
+binary = "fx"
+module = "model"
+upstream_cases = 2
+ignored = 1
