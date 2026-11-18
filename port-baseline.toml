@@ -183,3 +183,14 @@ reason = "checks mutable_value() of the int64 type"
 [[file.added]]
 name = "safe_add_into_accepts_a_type_made_by_the_macro"
 reason = "checks that the int64 type satisfies the trait StrongInt64 that safe_add_into needs"
+
+# util/sorted_interval_list_test.cc: one case runs only in a debug build (the guard at line 44)
+# and one only in an optimised build (the guard at line 90).
+[[file]]
+upstream = "util/sorted_interval_list_test.cc"
+rust = "crates/util/src/sorted_interval_list.rs"
+binary = "cpsat_util"
+module = "sorted_interval_list::tests"
+upstream_cases = 74
+debug_only = 1
+release_only = 1
