@@ -13,8 +13,16 @@
 //
 // Ported from ortools/base/hash.h and ortools/base/hash.cc at commit c931f5f7. Changed: translated from C++ to Rust.
 
+// This is a copy of the code from https://github.com/ztanml/fast-hash
+// We include it here for build simplicity.
+//
+// We have made 2 modification:
+//   - replace the #define with an inline method to fix compilation on windows.
+//   - rename mix into mix_internal and hide inside a unnamed namespace.
+
 /// The 64 bit fast-hash of `buf`. The C++ reads each whole word of the buffer in the byte
-/// order of the host, and this port reads little endian, the order of every supported host.
+/// order of the host and this port reads little endian, so the two agree on little endian
+/// hosts only.
 pub fn fasthash64(buf: &[u8], seed: u64) -> u64 {
     let m: u64 = 0x880355f21e6d1965;
     let (words, tail) = buf.as_chunks::<8>();

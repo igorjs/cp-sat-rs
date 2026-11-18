@@ -1,5 +1,5 @@
 # Byte strings for fasthash64: every length from 0 to 17 (each tail length of 0 to 7 bytes,
-# with 0, 1 and 2 whole words), then lengths around 32 and 64, and 1,000. Each length runs with
+# with 0, 1 and 2 whole words), then lengths 31, 32, 33, 64 and 1,000. Each length runs with
 # three seeds: 0, 1 and a large one. The bytes of a case are (7 * i + 3) mod 256 for byte i.
 case
 bytes: 
