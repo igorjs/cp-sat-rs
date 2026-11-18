@@ -636,3 +636,27 @@ binary = "cpsat_sat"
 module = "util::tests"
 upstream_cases = 66
 pending = 60
+
+# sat/cp_model_test_utils has no upstream test file, so every test here is an added test.
+[[file]]
+upstream = "sat/cp_model_test_utils.cc"
+rust = "crates/sat/src/cp_model_test_utils.rs"
+binary = "cpsat_sat"
+module = "cp_model_test_utils::tests"
+upstream_cases = 0
+
+[[file.added]]
+name = "pigeonhole_problem_with_given_holes_has_the_pairwise_clauses"
+reason = "upstream has no test for this file; checks the variables and the two kinds of clause"
+
+[[file.added]]
+name = "pigeonhole_problem_without_holes_uses_one_hole_fewer_than_pigeons"
+reason = "checks the default number of holes"
+
+[[file.added]]
+name = "random_generators_give_equal_models_for_equal_seeds"
+reason = "checks that the generator the caller passes decides the model"
+
+[[file.added]]
+name = "generated_models_pass_validate_cp_model"
+reason = "checks that each generator builds a valid model"

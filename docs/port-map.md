@@ -221,8 +221,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/cp_model_symmetries.h` | 86 | `sat/cp_model_symmetries_test.cc` | 33 | `algorithms/sparse_permutation.h`, `sat/presolve_context.h`, `util/logging.h`, `util/time_limit.h` | 16 | - | todo |
 | sat | `sat/cp_model_table.cc` | 384 | `sat/cp_model_table_test.cc` | 12 | `base/stl_util.h`, `sat/cp_model_table.h`, `sat/cp_model_utils.h`, `sat/presolve_context.h` | 17 | - | todo |
 | sat | `sat/cp_model_table.h` | 78 | `sat/cp_model_table_test.cc` | 12 | `base/types.h`, `sat/presolve_context.h` | 16 | - | todo |
-| sat | `sat/cp_model_test_utils.cc` | 141 | none | - | `base/types.h`, `sat/cp_model_test_utils.h`, `sat/cp_model_utils.h` | 4 | 0 | todo |
-| sat | `sat/cp_model_test_utils.h` | 45 | none | - | - | 0 | 0 | todo |
+| sat | `sat/cp_model_test_utils.cc` | 141 | none | - | `base/types.h`, `sat/cp_model_test_utils.h`, `sat/cp_model_utils.h` | 4 | 0 | done |
+| sat | `sat/cp_model_test_utils.h` | 45 | none | - | - | 0 | 0 | done |
 | sat | `sat/cp_model_utils.cc` | 1605 | `sat/cp_model_utils_test.cc` | 36 | `base/macros/os_support.h`, `base/stl_util.h`, `sat/cp_model_utils.h`, `sat/sat_literal.h`, `util/full_precision_inequalities.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 4 | 0 | partial |
 | sat | `sat/cp_model_utils.h` | 691 | `sat/cp_model_utils_test.cc` | 36 | `base/base_export.h`, `base/hash.h`, `base/helpers.h`, `base/macros/os_support.h`, `base/options.h`, `base/types.h`, `util/bitset.h`, `util/sorted_interval_list.h` | 3 | 0 | partial |
 | sat | `sat/cumulative.cc` | 417 | `sat/cumulative_test.cc` | 16 | `sat/cumulative.h`, `sat/cumulative_energy.h`, `sat/disjunctive.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/integer_expr.h`, `sat/intervals.h`, `sat/linear_constraint.h`, `sat/model.h`, `sat/pb_constraint.h`, `sat/precedences.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/scheduling_helpers.h`, `sat/timetable.h`, `sat/timetable_edgefinding.h`, `util/strong_integers.h` | 17 | - | todo |

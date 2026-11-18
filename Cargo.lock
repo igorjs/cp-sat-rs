@@ -141,6 +141,7 @@ dependencies = [
  "cpsat-base",
  "cpsat-port",
  "cpsat-proto",
+ "cpsat-sat",
  "cpsat-testutil",
  "cpsat-util",
  "log",
