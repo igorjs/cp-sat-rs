@@ -273,3 +273,11 @@ reason = "checks the CHECK_NE of the signed value constructor"
 [[file.added]]
 name = "literals_order_by_index_and_print_with_a_sign"
 reason = "checks the order, the text of a literal, a span of literals and a span of indices, and the helper Literals"
+
+[[file]]
+upstream = "sat/cp_model_utils_test.cc"
+rust = "crates/sat/src/cp_model_utils.rs"
+binary = "cpsat_sat"
+module = "cp_model_utils::tests"
+upstream_cases = 36
+pending = 18
