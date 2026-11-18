@@ -410,6 +410,52 @@ reason = "checks the kind of every constraint, the Rust form of the generated co
 name = "canonicalize_lin_max_of_another_constraint_dies_in_debug_and_switches_in_release"
 reason = "checks the DCHECK in debug and the switch of the oneof in release"
 
+# sat/integer_base is ported in part: IntegerValue, its limits and the two capped functions that
+# sat/diffn_util calls. The overflow helpers are stubs that the one case without a new type needs.
+[[file]]
+upstream = "sat/integer_base_test.cc"
+rust = "crates/sat/src/integer_base.rs"
+binary = "cpsat_sat"
+module = "integer_base::tests"
+upstream_cases = 6
+pending = 5
+ignored = 1
+
+[[file.added]]
+name = "integer_value_arithmetic_and_ordering_equal_those_of_the_inner_integers"
+reason = "upstream has no case for the strong integer; checks sum, difference, product and ordering against the inner i64"
+
+[[file.added]]
+name = "integer_value_limits_are_symmetric_and_inside_the_integer_range"
+reason = "checks that the limits are the largest i64 minus one and its negation"
+
+[[file.added]]
+name = "cap_prod_i_and_cap_sub_i_saturate_like_the_inner_functions"
+reason = "upstream has no case for the capped functions; checks the clamped products and differences"
+
+# sat/diffn_util is ported in part: Rectangle and the two intersection functions with what they
+# call. Each case that needs another item is ignored (a stub) or pending (an unported type).
+[[file]]
+upstream = "sat/diffn_util_test.cc"
+rust = "crates/sat/src/diffn_util.rs"
+binary = "cpsat_sat"
+module = "diffn_util::tests"
+upstream_cases = 28
+pending = 18
+ignored = 7
+
+[[file.added]]
+name = "find_one_intersection_reports_two_overlapping_rectangles"
+reason = "the upstream cases of the two functions need unported generators; checks an overlapping pair against the reference build"
+
+[[file.added]]
+name = "find_one_intersection_ignores_rectangles_that_only_touch_on_an_edge"
+reason = "checks that rectangles that share an edge give no pair, as the reference build does"
+
+[[file.added]]
+name = "find_one_intersection_with_zero_area_finds_a_line_inside_a_rectangle"
+reason = "checks a zero width rectangle inside and on the edge of another, and the empty input, against the reference build"
+
 # util/full_precision_inequalities is ported in part: what sat/cp_model_utils calls. The rest is
 # a stub and each upstream case that needs it is a pending line.
 [[file]]
