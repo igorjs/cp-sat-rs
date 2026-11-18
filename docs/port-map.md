@@ -55,8 +55,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | base | `base/gzipfile.cc` | 153 | `base/gzipfile_test.cc` | 2 | `base/basictypes.h`, `base/file.h`, `base/gzipfile.h` | 3 | - | todo |
 | base | `base/gzipfile.h` | 24 | `base/gzipfile_test.cc` | 2 | `base/basictypes.h`, `base/file.h` | 2 | - | todo |
 | base | `base/gzipstring.h` | 110 | none | - | - | 0 | - | todo |
-| base | `base/hash.cc` | 84 | none | - | `base/hash.h` | 1 | 0 | todo |
-| base | `base/hash.h` | 85 | none | - | - | 0 | 0 | todo |
+| base | `base/hash.cc` | 84 | none | - | `base/hash.h` | 1 | 0 | done |
+| base | `base/hash.h` | 85 | none | - | - | 0 | 0 | done |
 | base | `base/helpers.cc` | 213 | none | - | `base/file.h`, `base/helpers.h` | 3 | - | todo |
 | base | `base/helpers.h` | 79 | none | - | `base/file.h`, `base/options.h` | 2 | - | todo |
 | base | `base/init_google.h` | 60 | none | - | - | 0 | - | todo |

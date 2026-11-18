@@ -242,3 +242,15 @@ reason = "checks that the point after a parabola minimum at kint64max wraps and 
 [[file.added]]
 name = "sum_of_k_min_value_in_domain_goes_past_i32_max_without_wrapping"
 reason = "checks the sum for an interval that crosses the largest int, where the upstream counter overflows"
+
+# base/hash has no upstream test file, so the one test here is an added test.
+[[file]]
+upstream = "base/hash.h"
+rust = "crates/base/src/hash.rs"
+binary = "cpsat_base"
+module = "hash::tests"
+upstream_cases = 0
+
+[[file.added]]
+name = "fasthash64_equals_the_hash_of_the_reference_for_every_case"
+reason = "upstream has no test for this file; compares fasthash64 with the C++ hash for 69 byte strings and seeds"

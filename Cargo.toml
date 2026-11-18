@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/difftest", "crates/port", "crates/proto", "crates/testutil", "crates/util", "xtask"]
+members = ["crates/base", "crates/difftest", "crates/port", "crates/proto", "crates/testutil", "crates/util", "xtask"]
 exclude = ["xtask/tests/fixtures"]
 
 [workspace.package]
