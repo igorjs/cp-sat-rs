@@ -12,6 +12,7 @@
 // limitations under the License.
 //
 // Ported from ortools/sat/primary_variables.h at commit c931f5f7. Changed: translated from C++ to Rust.
+// Ported from ortools/sat/primary_variables.cc at commit c931f5f7. Changed: translated from C++ to Rust.
 
 // Signed overflow is undefined upstream. Overflow checks are on here, so an arithmetic
 // overflow in this module panics.
@@ -104,7 +105,8 @@ fn get_relationship_for_constraint(
             }
         }
         Some(Constraint::LinMax(lin_max)) => {
-            let target = lin_max.target.clone().unwrap_or_default();
+            let default_target = LinearExpressionProto::default();
+            let target = lin_max.target.as_ref().unwrap_or(&default_target);
             // We can deduce only the variables that are only in the target.
             for i in 0..target.vars.len() {
                 if target.coeffs[i] == 0 {
@@ -122,7 +124,8 @@ fn get_relationship_for_constraint(
             }
         }
         Some(Constraint::IntProd(int_prod)) => {
-            let target = int_prod.target.clone().unwrap_or_default();
+            let default_target = LinearExpressionProto::default();
+            let target = int_prod.target.as_ref().unwrap_or(&default_target);
             let mut variable_appearance_count: BTreeMap<i32, i32> = BTreeMap::new();
             for &var in &target.vars {
                 *variable_appearance_count.entry(var).or_default() += 1;
@@ -705,7 +708,8 @@ pub fn compute_all_variables_from_primary_variables(
                     }
                     max = max.max(expr_value);
                 }
-                let target = lin_max.target.clone().unwrap_or_default();
+                let default_target = LinearExpressionProto::default();
+                let target = lin_max.target.as_ref().unwrap_or(&default_target);
                 let mut coeff_of_var: i64 = 1;
                 for j in 0..target.vars.len() {
                     if target.vars[j] == var {
@@ -729,7 +733,8 @@ pub fn compute_all_variables_from_primary_variables(
                     product *= expr_value;
                 }
                 let mut coeff_of_var: i64 = 1;
-                let target = int_prod.target.clone().unwrap_or_default();
+                let default_target = LinearExpressionProto::default();
+                let target = int_prod.target.as_ref().unwrap_or(&default_target);
                 for j in 0..target.vars.len() {
                     if target.vars[j] == var {
                         coeff_of_var = target.coeffs[j];
