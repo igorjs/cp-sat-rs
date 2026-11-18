@@ -140,6 +140,7 @@ dependencies = [
 name = "cpsat-util"
 version = "0.0.0"
 dependencies = [
+ "cpsat-testutil",
  "rand_chacha",
 ]
 

@@ -64,3 +64,91 @@ upstream_cases = 17
 [[file.added]]
 name = "cap_functions_equal_the_clamped_i128_result"
 reason = "property test: cap_add, cap_sub and cap_prod equal the i128 result clamped to the i64 range, on random and corner pairs"
+
+# util/strong_integers has no upstream test file, so every test here is an added test.
+[[file]]
+upstream = "util/strong_integers.h"
+rust = "crates/util/src/strong_integers.rs"
+binary = "cpsat_util"
+module = "strong_integers::tests"
+upstream_cases = 0
+
+[[file.added]]
+name = "adding_two_values_of_an_index_type_gives_the_sum"
+reason = "upstream has no test for this header; checks the sum of two index values"
+
+[[file.added]]
+name = "adding_two_values_of_an_int64_type_gives_the_sum"
+reason = "checks the sum of two int64 values"
+
+[[file.added]]
+name = "value_and_debug_text_of_an_index_type_are_the_integer"
+reason = "checks value() and the Debug and Display text of an index type"
+
+[[file.added]]
+name = "value_and_debug_text_of_an_int64_type_are_the_integer"
+reason = "checks value() and the Debug and Display text of an int64 type"
+
+[[file.added]]
+name = "adding_one_to_the_largest_index_value_panics"
+reason = "checks that overflow panics for an index type, in debug and release, as the C++ int overflow is undefined"
+
+[[file.added]]
+name = "adding_one_to_the_largest_int64_value_panics"
+reason = "checks that overflow panics for an int64 type, in debug and release"
+
+[[file.added]]
+name = "incrementing_the_largest_values_panics"
+reason = "checks that increment and += panic on overflow for both macros"
+
+[[file.added]]
+name = "negating_the_smallest_int64_value_panics"
+reason = "checks that the unary minus panics on overflow"
+
+[[file.added]]
+name = "hash_of_an_index_value_equals_the_hash_of_its_integer"
+reason = "checks the hash of an index value against the hash of its integer"
+
+[[file.added]]
+name = "hash_of_an_int64_value_equals_the_hash_of_its_integer"
+reason = "checks the hash of an int64 value against the hash of its integer"
+
+[[file.added]]
+name = "ordering_of_index_values_agrees_with_their_integers"
+reason = "checks the six comparisons of an index type, with itself and with an i32"
+
+[[file.added]]
+name = "ordering_of_int64_values_agrees_with_their_integers"
+reason = "checks the six comparisons of an int64 type, with itself and with an i64"
+
+[[file.added]]
+name = "index_operators_take_the_type_or_its_integer_on_either_side"
+reason = "checks the arithmetic operators of an index type with both operand orders"
+
+[[file.added]]
+name = "int64_operators_take_the_type_or_its_integer_on_either_side"
+reason = "checks the arithmetic, shift and bit operators of an int64 type with both operand orders"
+
+[[file.added]]
+name = "assignment_operators_take_the_type_or_its_integer"
+reason = "checks the compound assignment operators of both macros"
+
+[[file.added]]
+name = "increment_and_decrement_return_the_new_or_the_old_value"
+reason = "checks that the prefix forms return the new value and the postfix forms the old one"
+
+[[file.added]]
+name = "default_value_is_zero_and_limits_are_those_of_the_integer"
+reason = "checks the default value and the limits"
+
+[[file.added]]
+name = "type_name_is_the_name_given_to_the_macro"
+reason = "checks TypeName() for both macros"
+
+[[file.added]]
+name = "mutable_value_changes_the_stored_integer"
+reason = "checks mutable_value() of the int64 type"
+
+[[file.added]]
+name = "safe_add_into_accepts_a_type_made_by_the_macro"
+reason = "checks that the int64 type satisfies the trait StrongInt64 that safe_add_into needs"

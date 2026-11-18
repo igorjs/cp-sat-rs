@@ -277,3 +277,15 @@ template <typename T> T CapOrFloatAdd(T x, T y);   // util/saturated_arithmetic.
 ```rust
 pub fn cap_or_float_add<T: CapOrFloatAdd>(x: T, y: T) -> T {
 ```
+
+## 18. Operators of strong integer types
+
+The macros of rule 4 give each type the operators of the C++ class, with the type or its integer on either side. A C++ operator that has no Rust operator is a method: `x++` is `x.post_increment()`, `++x` is `x.pre_increment()`, `x--` and `--x` likewise, and `+x` is `x.unary_plus()`. `numeric_limits<T>::min()`, `lowest()` and `max()` are the constants `T::MIN` and `T::MAX`. The accessor `value<ValType>()` is `value()` and an `as` cast.
+
+```cpp
+const ThisType operator++(int);   // util/strong_integers.h:117
+```
+
+```rust
+pub fn post_increment(&mut self) -> Self
+```
