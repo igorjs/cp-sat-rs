@@ -365,7 +365,7 @@ pub fn multiplication_by(&self, coeff: i64, exact: Option<&mut bool>) -> Domain
 
 ## 24. `std::set` positions and `LOG(DFATAL)`
 
-A `std::set` that hands out iterators is a sorted `Vec` and an iterator is the `usize` position, since stable Rust has no cursor on a `BTreeSet`. `LOG(DFATAL)` is `panic!` in a debug build and `log::error!` in an optimised build. `DLOG_IF(DFATAL, c)` is `debug_assert!`, which is silent in an optimised build as `DLOG_IF` is.
+A `std::set` or an `absl::btree_set` that hands out iterators is a sorted `Vec` and an iterator is the `usize` position, since stable Rust has no cursor on a `BTreeSet`. `LOG(DFATAL)` is `panic!` in a debug build and `log::error!` in an optimised build. `DLOG_IF(DFATAL, c)` is `debug_assert!`, which is silent in an optimised build as `DLOG_IF` is.
 
 ```cpp
 auto result = intervals_.insert({start, end});   // util/sorted_interval_list.cc:975
@@ -463,4 +463,19 @@ ConstraintProto::ConstraintCase::kBoolOr   // sat/cp_model_utils.h:636
 ```rust
 fasthash64(&bytes_of_field, seed)   // bytes from field.to_ne_bytes()
 ConstraintCase::BoolOr
+```
+
+## 32. Templates over plain structs, and spans that hand back a sub-span
+
+A C++ template over struct types that share member names (`RectangleT::x_min`) is a private trait with one accessor for each member the template reads, and an associated type for the member type. A function that returns an `absl::Span<int>` taken from its `absl::Span<int>` argument returns a `&'a mut [i32]` with the lifetime of that argument.
+
+```cpp
+template <typename RectangleT>
+std::optional<std::pair<int, int>> FindOneIntersectionIfPresentImpl(absl::Span<const RectangleT> rectangles, ...);   // sat/diffn_util.cc:2287
+absl::Span<int> FilterBoxesThatAreTooLarge(absl::Span<const Rectangle> cached_rectangles, absl::Span<const IntegerValue> energies, absl::Span<int> boxes);   // sat/diffn_util.h:199
+```
+
+```rust
+fn find_one_intersection_if_present_impl<R: RectangleCoordinates>(rectangles: &[R], ...) -> Option<(i32, i32)>
+pub fn filter_boxes_that_are_too_large<'a>(cached_rectangles: &[Rectangle], energies: &[IntegerValue], boxes: &'a mut [i32]) -> &'a mut [i32]
 ```
