@@ -2,9 +2,10 @@
 //! disagreement, the summary and the rule that turns it into an exit code.
 
 use std::{
+    cell::Cell,
     collections::BTreeMap,
     fmt::Debug,
-    panic::{AssertUnwindSafe, catch_unwind},
+    panic::{self, AssertUnwindSafe, catch_unwind},
 };
 
 use cpsat_proto::CpSolverStatus;
@@ -40,9 +41,27 @@ pub struct Disagreement {
     pub detail: String,
 }
 
+thread_local! {
+    static IN_GUARD: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Keeps the message of a panic that `guarded` catches out of the output. A
+/// panic anywhere else still reaches the hook that was installed before.
+pub fn silence_guarded_panics() {
+    let previous = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        if !IN_GUARD.get() {
+            previous(info);
+        }
+    }));
+}
+
 /// Runs `call` and returns its value, or the message of the panic it raised.
 pub fn guarded<T>(call: impl FnOnce() -> T) -> Result<T, String> {
-    catch_unwind(AssertUnwindSafe(call)).map_err(|payload| {
+    let outer = IN_GUARD.replace(true);
+    let caught = catch_unwind(AssertUnwindSafe(call));
+    IN_GUARD.set(outer);
+    caught.map_err(|payload| {
         payload
             .downcast_ref::<String>()
             .cloned()
@@ -157,7 +176,9 @@ pub fn check_solution(
 }
 
 /// How a model ended. `Skipped` and `Invalid` are not solver statuses: the first
-/// is a block that is no `CpModelProto`, the second a model both validations reject.
+/// is a block that is no `CpModelProto`, the second a model that at least one of
+/// the two validations of the reference rejects. A model that could not be
+/// compared because the bridge failed also ends `Invalid`, with a disagreement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ModelStatus {
     Skipped,
@@ -198,6 +219,8 @@ impl ModelStatus {
 pub struct Limits {
     pub max_unknown: usize,
     pub min_compared: usize,
+    pub min_changed: usize,
+    pub min_rejected: usize,
 }
 
 /// The tally of a run.
@@ -269,6 +292,18 @@ impl Summary {
                 limits.min_compared.max(1)
             ));
         }
+        if self.changed < limits.min_changed {
+            reasons.push(format!(
+                "{} changed solutions were checked, at least {} are needed",
+                self.changed, limits.min_changed
+            ));
+        }
+        if self.rejected < limits.min_rejected {
+            reasons.push(format!(
+                "{} changed solutions were rejected by the reference, at least {} are needed",
+                self.rejected, limits.min_rejected
+            ));
+        }
         reasons
     }
 }
@@ -280,7 +315,25 @@ mod tests {
     const LIMITS: Limits = Limits {
         max_unknown: 2,
         min_compared: 3,
+        min_changed: 0,
+        min_rejected: 0,
     };
+
+    const SOLUTION_LIMITS: Limits = Limits {
+        min_changed: 10,
+        min_rejected: 4,
+        ..LIMITS
+    };
+
+    fn summary_with_checks(changed: usize, rejected: usize) -> Summary {
+        let mut summary = summary_of(&[ModelStatus::Optimal; 3]);
+        summary.record_check(&CheckResult {
+            disagreements: Vec::new(),
+            changed,
+            rejected,
+        });
+        summary
+    }
 
     fn summary_of(statuses: &[ModelStatus]) -> Summary {
         let mut summary = Summary::default();
@@ -464,6 +517,25 @@ mod tests {
     }
 
     #[test]
+    fn guarded_leaves_the_flag_of_the_caller_as_it_found_it() {
+        // Arrange
+        let outside = IN_GUARD.get();
+
+        // Act
+        let _ = guarded(|| IN_GUARD.get());
+        let _ = guarded(|| panic!("caught"));
+        let nested = guarded(|| {
+            let _ = guarded(|| 1);
+            IN_GUARD.get()
+        });
+
+        // Assert
+        assert!(!outside);
+        assert!(!IN_GUARD.get());
+        assert_eq!(nested, Ok(true));
+    }
+
+    #[test]
     fn the_report_names_the_file_the_line_and_the_comparison() {
         // Arrange
         let disagreement = Disagreement {
@@ -526,11 +598,53 @@ mod tests {
     }
 
     #[test]
+    fn changed_solutions_at_the_floor_pass_and_one_below_fails() {
+        // Arrange
+        let at_floor = summary_with_checks(10, 4);
+        let below = summary_with_checks(9, 4);
+
+        // Act
+        let passing = at_floor.failures(&SOLUTION_LIMITS);
+        let failing = below.failures(&SOLUTION_LIMITS);
+
+        // Assert
+        assert_eq!(passing, Vec::<String>::new());
+        assert_eq!(failing.len(), 1);
+        assert!(failing[0].contains("9 changed solutions"));
+    }
+
+    #[test]
+    fn rejected_solutions_at_the_floor_pass_and_one_below_fails() {
+        // Arrange
+        let below = summary_with_checks(10, 3);
+
+        // Act
+        let failing = below.failures(&SOLUTION_LIMITS);
+
+        // Assert
+        assert_eq!(failing.len(), 1);
+        assert!(failing[0].contains("3 changed solutions were rejected"));
+    }
+
+    #[test]
+    fn a_run_with_no_check_at_all_fails_both_floors() {
+        // Arrange
+        let summary = summary_with_checks(0, 0);
+
+        // Act
+        let failing = summary.failures(&SOLUTION_LIMITS);
+
+        // Assert
+        assert_eq!(failing.len(), 2);
+    }
+
+    #[test]
     fn an_empty_corpus_fails_even_with_no_least_count() {
         // Arrange
         let limits = Limits {
             max_unknown: 0,
             min_compared: 0,
+            ..LIMITS
         };
 
         // Act

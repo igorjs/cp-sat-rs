@@ -6,7 +6,7 @@
 //! disagreement and when it compared too few models or too many ended `UNKNOWN`.
 
 use std::{
-    fs, panic,
+    fs,
     path::{Path, PathBuf},
     process::ExitCode,
 };
@@ -14,7 +14,7 @@ use std::{
 use cpsat_difftest::{
     compare::{
         Comparison, Disagreement, Limits, ModelStatus, Summary, agree, check_solution, guarded,
-        report_disagreement,
+        report_disagreement, silence_guarded_panics,
     },
     extract::extract,
     reference_debug_string, reference_parse_text, reference_solution_is_feasible, reference_solve,
@@ -42,9 +42,15 @@ const MAX_DETERMINISTIC_TIME: f64 = 0.01;
 const MAX_UNKNOWN: usize = 1;
 /// The models of the first full run, which are not skipped.
 const MIN_COMPARED: usize = 200;
+/// The changed solutions of the first full run.
+const MIN_CHANGED: usize = 443;
+/// The changed solutions of the first full run that the reference rejects.
+const MIN_REJECTED: usize = 246;
 const LIMITS: Limits = Limits {
     max_unknown: MAX_UNKNOWN,
     min_compared: MIN_COMPARED,
+    min_changed: MIN_CHANGED,
+    min_rejected: MIN_REJECTED,
 };
 
 type Check = Result<(), Disagreement>;
@@ -152,6 +158,8 @@ struct Outcome {
     status: ModelStatus,
     disagreements: Vec<Disagreement>,
     check: Option<cpsat_difftest::compare::CheckResult>,
+    /// Why the block was skipped, for the line of the run.
+    skip_reason: Option<String>,
 }
 
 impl Outcome {
@@ -160,6 +168,7 @@ impl Outcome {
             status,
             disagreements: Vec::new(),
             check: None,
+            skip_reason: None,
         }
     }
 
@@ -186,7 +195,15 @@ fn solve_and_check(bytes: &[u8], model: &CpModelProto) -> Outcome {
         Err(disagreement) => return Outcome::of(ModelStatus::Unknown).disagreeing([disagreement]),
     };
     let mut outcome = Outcome::of(ModelStatus::from_solver(response.status()));
-    if response.solution.is_empty() {
+    if outcome.status == ModelStatus::ModelInvalid {
+        return outcome.disagreeing([Disagreement {
+            comparison: Comparison::Check,
+            detail: "the reference calls MODEL_INVALID a model that both validations accept"
+                .to_owned(),
+        }]);
+    }
+    let has_solution = matches!(outcome.status, ModelStatus::Feasible | ModelStatus::Optimal);
+    if !has_solution && response.solution.is_empty() {
         return outcome;
     }
     let domains: Vec<&[i64]> = model
@@ -215,9 +232,26 @@ fn solve_and_check(bytes: &[u8], model: &CpModelProto) -> Outcome {
     outcome
 }
 
+/// A block the reference does not parse as a `CpModelProto`: Rust must reject it too.
+fn skipped(text: &str, reference_error: &str) -> Outcome {
+    let mut outcome = Outcome::of(ModelStatus::Skipped);
+    outcome.skip_reason = Some(reference_error.to_owned());
+    if guarded(|| parse_test_proto::<CpModelProto>(text)).is_ok() {
+        outcome.disagreements.push(Disagreement {
+            comparison: Comparison::Parse,
+            detail: format!(
+                "Rust parses a text that the reference rejects: {}",
+                reference_error
+            ),
+        });
+    }
+    outcome
+}
+
 fn compare_block(text: &str) -> Outcome {
-    let Ok(bytes) = reference_parse_text(&CpModelProto::full_name(), text) else {
-        return Outcome::of(ModelStatus::Skipped);
+    let bytes = match reference_parse_text(&CpModelProto::full_name(), text) {
+        Ok(bytes) => bytes,
+        Err(error) => return skipped(text, &error.to_string()),
     };
     let model = match CpModelProto::decode(bytes.as_slice()) {
         Ok(model) => model,
@@ -266,7 +300,15 @@ fn run() -> Result<ExitCode, String> {
         println!("{file}: {} blocks", blocks.len());
         for block in blocks {
             let outcome = compare_block(&block.text);
-            println!("{file}:{}: {}", block.line, outcome.status.name());
+            match &outcome.skip_reason {
+                Some(reason) => println!(
+                    "{file}:{}: {} (reference: {})",
+                    block.line,
+                    outcome.status.name(),
+                    reason.lines().next().unwrap_or_default()
+                ),
+                None => println!("{file}:{}: {}", block.line, outcome.status.name()),
+            }
             for disagreement in &outcome.disagreements {
                 println!("  {}", report_disagreement(&file, block.line, disagreement));
             }
@@ -289,8 +331,9 @@ fn run() -> Result<ExitCode, String> {
 }
 
 fn main() -> ExitCode {
-    // A panic in a Rust call is caught and reported as a disagreement.
-    panic::set_hook(Box::new(|_| {}));
+    // A panic caught by `guarded` is reported as a disagreement, so its message
+    // stays out of the output. Any other panic prints as usual.
+    silence_guarded_panics();
     run().unwrap_or_else(|message| {
         eprintln!("error: {message}");
         ExitCode::FAILURE

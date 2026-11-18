@@ -18,7 +18,11 @@ REFERENCE_PREFIX=<prefix of the reference build> \
 ```
 
 A block that the reference does not parse as a `CpModelProto`, such as a
-parameter block, is skipped and counted. For every other block the run makes four
+parameter block, is skipped and counted, and the line of the run shows the error
+of the reference. The Rust `parse_test_proto::<CpModelProto>` must reject the same
+text: if it parses it, that is a parse disagreement. In the first run the
+reference rejected 4 blocks (a field `maximize` that does not exist, and
+`tightened_variables`), and Rust rejected the same 4. For every other block the run makes four
 comparisons, each against the reference at the pinned commit:
 
 | Comparison | Rust side | Reference side |
@@ -32,8 +36,11 @@ The check runs for a model that both validations accept. The reference solves it
 with one worker, the seed 1 and `max_deterministic_time`, and no wall clock
 limit. When the answer holds a solution, one variable at a time takes another
 value of its domain, for each of the first 20 variables. The summary counts the
-changed solutions and how many the reference rejects, so a checker that accepts
-every solution fails.
+changed solutions and how many the reference rejects, and the run fails below the
+two limits that follow, so a checker that accepts every solution fails and the
+check cannot disappear unnoticed. A reference answer of `MODEL_INVALID` for a
+model both validations accept is a disagreement, and so is a `FEASIBLE` or
+`OPTIMAL` answer that holds no solution values for a model with variables.
 
 A panic in a Rust call is caught and reported as a disagreement for that model,
 and the run goes on. The comparison has no rule that excuses a difference.
@@ -51,3 +58,5 @@ compared; 41 invalid; 125 `OPTIMAL`, 34 `INFEASIBLE`, no `FEASIBLE`, no
 | `MAX_DETERMINISTIC_TIME` | 0.01 seconds | The number of `UNKNOWN` was 19 at 0.0001, 5 at 0.001, and 0 at 0.01, 0.1, 1 and 10. 0.01 is the smallest value after which it stops falling. |
 | `MAX_UNKNOWN` | 1 | One model above the 0 that ended `UNKNOWN` at 0.01. The run fails when more end `UNKNOWN`. |
 | `MIN_COMPARED` | 200 | The count of compared models of that run. A run that compares fewer, or none, fails. |
+| `MIN_CHANGED` | 443 | The count of changed solutions of that run. The run fails below it. |
+| `MIN_REJECTED` | 246 | The count of changed solutions that the reference rejects in that run. The run fails below it. |
