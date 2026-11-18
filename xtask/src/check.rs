@@ -207,6 +207,14 @@ fn check_upstream(
         .map_err(|error| format!("cannot read upstream file {}: {error}", entry.upstream))?;
     let cases = upstream::count_cases(&text);
     let mut problems = Vec::new();
+    if !entry.upstream.ends_with(upstream::TEST_FILE_SUFFIX)
+        && let Some(test) = upstream::test_file_for(upstream_dir, &entry.upstream)
+    {
+        problems.push(format!(
+            "{}: upstream has the test file {test} for {}, and the entry does not name it",
+            entry.rust, entry.upstream
+        ));
+    }
     if cases.total() != entry.upstream_cases {
         problems.push(format!(
             "{}: baseline holds {} upstream cases, upstream has {}",

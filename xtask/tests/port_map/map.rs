@@ -66,14 +66,15 @@ fn an_include_cycle_ends_and_puts_both_files_at_the_same_depth() {
 }
 
 #[test]
-fn a_header_with_a_stub_is_partial_one_without_is_done_and_a_missing_one_is_todo() {
+fn a_header_with_a_stub_or_a_pending_line_is_partial_one_without_is_done_and_a_missing_one_is_todo()
+{
     // Arrange
     let root = empty_scratch("map_status");
     fs::create_dir_all(root.join("crates")).expect("create crates");
     let rust_tree = fixture("status").join("rust/crates/x");
     let target = root.join("crates/x");
     fs::create_dir_all(target.join("src")).expect("create the module folder");
-    for module in ["done.rs", "stub.rs"] {
+    for module in ["done.rs", "stub.rs", "pending.rs"] {
         fs::copy(
             rust_tree.join("src").join(module),
             target.join("src").join(module),
@@ -87,6 +88,7 @@ fn a_header_with_a_stub_is_partial_one_without_is_done_and_a_missing_one_is_todo
     // Assert
     let status = |file: &str| row_cells(&map, file)[8].clone();
     assert_eq!(status("sat/stub.h"), "partial");
+    assert_eq!(status("sat/pending.h"), "partial");
     assert_eq!(status("sat/done.h"), "done");
     assert_eq!(status("sat/todo.h"), "todo");
 }

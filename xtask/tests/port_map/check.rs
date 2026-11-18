@@ -85,6 +85,35 @@ fn a_baseline_of_five_upstream_cases_against_six_fails_with_upstream() {
     );
 }
 
+fn check_upstream_fixture(name: &str) -> crate::support::Outcome {
+    let upstream = scratch_copy(name).join("ortools");
+    let upstream = upstream.to_str().expect("utf8 path").to_string();
+    check_fixture(name, &["--upstream", "--upstream-dir", &upstream])
+}
+
+#[test]
+fn a_header_entry_with_no_cases_fails_when_upstream_has_a_test_file_for_it() {
+    // Arrange, Act
+    let outcome = check_upstream_fixture("test_file_hole");
+
+    // Assert
+    assert!(!outcome.success);
+    assert!(
+        outcome.stderr.contains("sat/model_test.cc"),
+        "{}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn a_header_entry_with_no_cases_passes_when_upstream_has_no_test_file_for_it() {
+    // Arrange, Act
+    let outcome = check_upstream_fixture("test_file_none");
+
+    // Assert
+    assert!(outcome.success, "{}", outcome.stderr);
+}
+
 #[test]
 fn an_ignore_with_no_reason_fails_and_names_the_test() {
     // Arrange, Act
