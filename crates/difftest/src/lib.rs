@@ -1,11 +1,15 @@
 //! Calls into the C++ reference solver, to compare the Rust port against it.
 //!
 //! The crate is empty unless the feature `reference` is on. Every call returns
-//! `Err` for a C++ exception or a parse failure, and never aborts.
+//! `Err` for a C++ exception, a parse failure or an input the reference solver
+//! needs to be valid and is not, and never aborts.
 
 #[cfg(feature = "reference")]
 #[cxx::bridge(namespace = "cpsat_difftest")]
 mod ffi {
+    // SAFETY: each function is declared in adapter.h with the same signature, takes
+    // only slices and strings that stay borrowed for the call, and the adapter
+    // turns every C++ exception into `Err`, so none unwinds into Rust.
     unsafe extern "C++" {
         include!("cpsat-difftest/src/adapter.h");
 
@@ -32,7 +36,9 @@ mod ffi {
         /// Returns the error text of `ValidateInputCpModel`, empty when the input is valid.
         fn reference_validate_input(parameter_bytes: &[u8], model_bytes: &[u8]) -> Result<String>;
 
-        /// Returns what `SolutionIsFeasible` says of `values` for the model.
+        /// Returns what `SolutionIsFeasible` says of `values` for the model. It is
+        /// an `Err` when the model fails `ValidateCpModel` or `values` has a
+        /// different length from the variables, as the check needs both.
         fn reference_solution_is_feasible(model_bytes: &[u8], values: &[i64]) -> Result<bool>;
 
         /// Returns the string of `CpSatSolverVersion`.
@@ -57,8 +63,8 @@ pub const REFERENCE_COMMIT: &str = env!("CPSAT_REFERENCE_COMMIT");
 #[cfg(all(test, feature = "reference"))]
 mod tests {
     use cpsat_proto::{
-        CpModelProto, CpObjectiveProto, CpSolverResponse, CpSolverStatus, IntegerVariableProto,
-        SatParameters,
+        ConstraintProto, CpModelProto, CpObjectiveProto, CpSolverResponse, CpSolverStatus,
+        IntegerVariableProto, LinearConstraintProto, SatParameters, constraint_proto,
     };
     use prost::Message;
 
@@ -67,10 +73,24 @@ mod tests {
     const MODEL_NAME: &str = "operations_research.sat.CpModelProto";
     const NOT_A_MESSAGE: [u8; 4] = [0xFF; 4];
     const MAX_VALUE: i64 = 10;
+    const MISSING_VARIABLE: i32 = 7;
 
     fn variable(domain: &[i64]) -> IntegerVariableProto {
         IntegerVariableProto {
             domain: domain.to_vec(),
+            ..Default::default()
+        }
+    }
+
+    fn linear_over_missing_variable() -> ConstraintProto {
+        ConstraintProto {
+            constraint: Some(constraint_proto::Constraint::Linear(
+                LinearConstraintProto {
+                    vars: vec![MISSING_VARIABLE],
+                    coeffs: vec![1],
+                    domain: vec![0, 1],
+                },
+            )),
             ..Default::default()
         }
     }
@@ -173,6 +193,62 @@ mod tests {
         // Assert
         assert!(inside);
         assert!(!outside);
+    }
+
+    #[test]
+    fn solution_is_feasible_rejects_a_model_that_is_not_valid() {
+        // Arrange
+        let invalid = [
+            CpModelProto {
+                variables: vec![variable(&[5])],
+                ..Default::default()
+            },
+            CpModelProto {
+                variables: vec![variable(&[0, 1])],
+                constraints: vec![linear_over_missing_variable()],
+                ..Default::default()
+            },
+        ];
+
+        for model in invalid {
+            // Act
+            let result = reference_solution_is_feasible(&model.encode_to_vec(), &[0]);
+
+            // Assert
+            let error = result.unwrap_err();
+            assert!(error.what().contains("not valid"), "{error}");
+        }
+    }
+
+    #[test]
+    fn solution_is_feasible_rejects_a_wrong_number_of_values() {
+        // Arrange
+        let model = maximise_x_model().encode_to_vec();
+
+        // Act
+        let result = reference_solution_is_feasible(&model, &[1, 2]);
+
+        // Assert
+        let error = result.unwrap_err();
+        assert!(error.what().contains("number of values"), "{error}");
+    }
+
+    #[test]
+    fn solve_reports_an_invalid_model_as_a_status() {
+        // Arrange
+        let model = CpModelProto {
+            variables: vec![variable(&[5])],
+            ..Default::default()
+        }
+        .encode_to_vec();
+        let parameters = SatParameters::default().encode_to_vec();
+
+        // Act
+        let response_bytes = reference_solve(&model, &parameters).unwrap();
+
+        // Assert
+        let response = CpSolverResponse::decode(response_bytes.as_slice()).unwrap();
+        assert_eq!(response.status(), CpSolverStatus::ModelInvalid);
     }
 
     #[test]

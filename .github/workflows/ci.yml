@@ -143,6 +143,17 @@ jobs:
         run: cargo test -p cpsat-difftest --features reference -j 4
       - if: hashFiles('crates/difftest/Cargo.toml') != ''
         run: cargo run -p cpsat-difftest --features reference --bin capture -j 4 -- --check
+      # On a manual run, prints a fixture for each input file, named
+      # crates/*/tests/fixtures/inputs/<kind>.<name>.in, to copy into a fixture.
+      - if: github.event_name == 'workflow_dispatch' && hashFiles('crates/difftest/Cargo.toml') != ''
+        run: |
+          for file in crates/*/tests/fixtures/inputs/*.in; do
+            [ -e "$file" ] || continue
+            kind=$(basename "$file"); kind=${kind%%.*}
+            echo "::group::$file"
+            cargo run -q -p cpsat-difftest --features reference --bin capture -j 4 -- "$kind" "$file"
+            echo "::endgroup::"
+          done
       # Saves a finished build even when the job is cancelled afterwards.
       - if: always() && steps.reference-cache.outputs.cache-hit != 'true' && hashFiles('.reference/.reference-commit') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

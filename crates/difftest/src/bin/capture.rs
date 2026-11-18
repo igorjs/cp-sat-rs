@@ -7,13 +7,8 @@
 //!
 //! # File format
 //!
-//! Both input files and fixture files are line based text. A file is a header,
-//! then cases, each starting with a line `case`. A header or case line is one of:
-//!
-//! - `key: value`, a single line value. Bytes are lowercase hex, and numbers are decimal.
-//! - `key:` followed by lines that start with `|`, a text value. Each such line is
-//!   `| ` and a line of the text, or `|` alone for an empty line. The lines are
-//!   joined by `\n`, so a text that ends with a newline ends with a `|` line.
+//! Both input files and fixture files use the line based text format of
+//! `text_format`. Bytes are lowercase hex, and numbers are decimal.
 //!
 //! In an input file, blank lines and lines that start with `#` are ignored and the
 //! header is empty. A fixture file starts with the header `commit` and `kind`,
@@ -28,6 +23,20 @@
 //!
 //! `message` is a full name such as `operations_research.sat.CpModelProto`. `long`
 //! uses the default limits of `ProtobufDebugString`.
+//!
+//! # Input files
+//!
+//! A committed input file is `crates/*/tests/fixtures/inputs/<kind>.<name>.in`, and
+//! the text before the first dot is its kind. The CI job `reference` prints
+//! `capture <kind> <file>` for each of them on a manual run, so a fixture can be
+//! made there. The fixture is the output, saved as `crates/*/tests/fixtures/<name>.txt`.
+//! `--check` reads only files with the fixture extension directly in the fixture
+//! folder, so an input file is never taken for a fixture.
+
+#[path = "capture/locations.rs"]
+mod locations;
+#[path = "capture/text_format.rs"]
+mod text_format;
 
 use std::{
     env, fs,
@@ -39,54 +48,12 @@ use cpsat_difftest::{
     REFERENCE_COMMIT, reference_debug_string, reference_fasthash64, reference_parse_text,
     reference_version,
 };
+use locations::{find_fixtures, repository_root};
+use text_format::{Case, all, from_hex, line, parse, render, single, text, to_hex};
 
 const USAGE: &str = "usage: capture <kind> <input file> | capture --check [path]";
 const CHECK_FLAG: &str = "--check";
-const CASE_LINE: &str = "case";
-const TEXT_MARK: char = '|';
-const COMMENT_MARK: char = '#';
-const KEY_END: &str = ":";
 const DEFAULT_LIMIT: i32 = i32::MAX;
-
-/// Where committed fixture files live: `crates/*/tests/fixtures/*.txt`, as
-/// (directory of the crates, directory in a crate, file extension).
-const FIXTURE_LOCATION: (&str, &str, &str) = ("crates", "tests/fixtures", "txt");
-
-type Case = Vec<Entry>;
-
-#[derive(Debug, Clone, PartialEq)]
-struct Entry {
-    key: String,
-    value: Value,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Value {
-    Line(String),
-    Text(String),
-}
-
-impl Value {
-    fn as_str(&self) -> &str {
-        match self {
-            Value::Line(text) | Value::Text(text) => text,
-        }
-    }
-}
-
-fn line(key: &str, value: impl ToString) -> Entry {
-    Entry {
-        key: key.to_owned(),
-        value: Value::Line(value.to_string()),
-    }
-}
-
-fn text(key: &str, value: impl Into<String>) -> Entry {
-    Entry {
-        key: key.to_owned(),
-        value: Value::Text(value.into()),
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Kind {
@@ -133,44 +100,6 @@ impl Kind {
             Kind::Hashes => &["bytes", "seed"],
         }
     }
-}
-
-fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn from_hex(hex: &str) -> Result<Vec<u8>, String> {
-    let digit = |byte: u8| {
-        char::from(byte)
-            .to_digit(16)
-            .and_then(|value| u8::try_from(value).ok())
-    };
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| match *pair {
-            [high, low] => digit(high)
-                .zip(digit(low))
-                .map(|(high, low)| high << 4 | low)
-                .ok_or_else(|| format!("`{hex}` holds a character that is not a hex digit")),
-            _ => Err(format!("`{hex}` is not an even number of hex digits")),
-        })
-        .collect()
-}
-
-fn single<'a>(case: &'a Case, key: &str) -> Result<&'a str, String> {
-    let mut found = case.iter().filter(|entry| entry.key == key);
-    match (found.next(), found.next()) {
-        (Some(entry), None) => Ok(entry.value.as_str()),
-        (None, _) => Err(format!("a case has no `{key}`")),
-        (Some(_), Some(_)) => Err(format!("a case has more than one `{key}`")),
-    }
-}
-
-fn all<'a>(case: &'a Case, key: &str) -> Vec<&'a str> {
-    case.iter()
-        .filter(|entry| entry.key == key)
-        .map(|entry| entry.value.as_str())
-        .collect()
 }
 
 fn parse_limits(pair: &str) -> Result<(i32, i32), String> {
@@ -238,103 +167,11 @@ fn recompute(kind: Kind, cases: &[Case]) -> Result<Vec<Case>, String> {
     cases.iter().map(|case| compute(kind, case)).collect()
 }
 
-fn render_entry(entry: &Entry, out: &mut String) {
-    match &entry.value {
-        Value::Line(value) if value.is_empty() => {
-            out.push_str(&format!("{}{KEY_END}\n", entry.key))
-        }
-        Value::Line(value) => out.push_str(&format!("{}{KEY_END} {value}\n", entry.key)),
-        Value::Text(value) => {
-            out.push_str(&format!("{}{KEY_END}\n", entry.key));
-            for text_line in value.split('\n') {
-                if text_line.is_empty() {
-                    out.push(TEXT_MARK);
-                } else {
-                    out.push_str(&format!("{TEXT_MARK} {text_line}"));
-                }
-                out.push('\n');
-            }
-        }
-    }
-}
-
-fn render(kind: Kind, cases: &[Case]) -> String {
-    let mut out = String::new();
-    render_entry(&line("commit", REFERENCE_COMMIT), &mut out);
-    render_entry(&line("kind", kind.name()), &mut out);
-    for case in cases {
-        out.push_str(CASE_LINE);
-        out.push('\n');
-        for entry in case {
-            render_entry(entry, &mut out);
-        }
-    }
-    out
-}
-
-/// A parsed file: the entries before the first `case` line, then the cases.
-struct Document {
-    header: Case,
-    cases: Vec<Case>,
-}
-
-fn parse(source: &str) -> Result<Document, String> {
-    let mut header = Case::new();
-    let mut cases: Vec<Case> = Vec::new();
-    let mut open_text = false;
-    for (index, raw) in source.split('\n').enumerate() {
-        let number = index + 1;
-        let fail = |message: &str| format!("line {number}: {message}");
-        if let Some(rest) = raw.strip_prefix(TEXT_MARK) {
-            let content = match rest.strip_prefix(' ') {
-                Some(content) => content,
-                None if rest.is_empty() => "",
-                None => return Err(fail("a text line must be `|` or `| ` and text")),
-            };
-            let current = cases.last_mut().unwrap_or(&mut header);
-            match current.last_mut() {
-                Some(Entry {
-                    value: Value::Text(existing),
-                    ..
-                }) if open_text => {
-                    existing.push('\n');
-                    existing.push_str(content);
-                }
-                Some(entry) if !open_text && entry.value == Value::Line(String::new()) => {
-                    entry.value = Value::Text(content.to_owned());
-                    open_text = true;
-                }
-                _ => return Err(fail("a text line must follow a `key:` line")),
-            }
-            continue;
-        }
-        open_text = false;
-        if raw.is_empty() || raw.starts_with(COMMENT_MARK) {
-            continue;
-        }
-        if raw == CASE_LINE {
-            cases.push(Case::new());
-            continue;
-        }
-        let (key, value) = match raw.split_once(KEY_END) {
-            Some((key, "")) => (key, ""),
-            Some((key, value)) => (
-                key,
-                value
-                    .strip_prefix(' ')
-                    .ok_or_else(|| fail("a value must follow `key:` and a space"))?,
-            ),
-            None => return Err(fail("expected `key: value`, `case` or a text line")),
-        };
-        if key.is_empty() || key.contains(char::is_whitespace) {
-            return Err(fail("a key is one word"));
-        }
-        cases
-            .last_mut()
-            .unwrap_or(&mut header)
-            .push(line(key, value));
-    }
-    Ok(Document { header, cases })
+fn render_fixture(kind: Kind, cases: &[Case]) -> String {
+    render(
+        &[line("commit", REFERENCE_COMMIT), line("kind", kind.name())],
+        cases,
+    )
 }
 
 fn capture_text(kind: Kind, input: &str) -> Result<String, String> {
@@ -351,14 +188,14 @@ fn capture_text(kind: Kind, input: &str) -> Result<String, String> {
             ));
         }
     }
-    Ok(render(kind, &recompute(kind, &document.cases)?))
+    Ok(render_fixture(kind, &recompute(kind, &document.cases)?))
 }
 
 fn check_text(source: &str) -> Result<(), String> {
     let document = parse(source)?;
     let kind_name = single(&document.header, "kind")?;
     let kind = Kind::parse(kind_name)?;
-    let expected = render(kind, &recompute(kind, &document.cases)?);
+    let expected = render_fixture(kind, &recompute(kind, &document.cases)?);
     if expected == source {
         return Ok(());
     }
@@ -381,30 +218,6 @@ fn check_file(path: &Path) -> Result<(), String> {
     let source = fs::read_to_string(path)
         .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
     check_text(&source).map_err(|error| format!("{}: {error}", path.display()))
-}
-
-fn directory_files(directory: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(directory) else {
-        return Vec::new();
-    };
-    let mut paths: Vec<PathBuf> = entries
-        .filter_map(|entry| Some(entry.ok()?.path()))
-        .collect();
-    paths.sort();
-    paths
-}
-
-fn find_fixtures(root: &Path) -> Vec<PathBuf> {
-    let (crates_dir, fixture_dir, extension) = FIXTURE_LOCATION;
-    directory_files(&root.join(crates_dir))
-        .into_iter()
-        .flat_map(|crate_dir| directory_files(&crate_dir.join(fixture_dir)))
-        .filter(|path| path.is_file() && path.extension().is_some_and(|found| found == extension))
-        .collect()
-}
-
-fn repository_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
 fn run(args: &[String]) -> Result<String, String> {
@@ -451,16 +264,10 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::locations::temp_dir;
 
     const PARSE_INPUT: &str = "case\nmessage: operations_research.sat.CpModelProto\n\
                                text:\n| variables { domain: 0 domain: 1 }\n";
-
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = env::temp_dir().join(format!("cpsat-difftest-{}-{name}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
 
     /// Writes a fixture made by `capture`, changes the byte after `needle` and
     /// checks the file.
@@ -517,23 +324,6 @@ mod tests {
     }
 
     #[test]
-    fn text_values_round_trip_through_the_file_format() {
-        // Arrange
-        let cases = vec![vec![
-            line("bytes", ""),
-            text("long", "# first\n\n  indented\r\nlast\n"),
-            text("empty", ""),
-        ]];
-        let rendered = render(Kind::Parsed, &cases);
-
-        // Act
-        let document = parse(&rendered).unwrap();
-
-        // Assert
-        assert_eq!(document.cases, cases);
-    }
-
-    #[test]
     fn capture_rejects_a_key_that_is_not_an_input() {
         // Arrange
         let input = "case\nlimit: 1 1\n";
@@ -571,23 +361,5 @@ mod tests {
         // Assert
         assert!(fixture.contains("\nseed: 7\nhash: "), "{fixture}");
         assert_eq!(check_text(&fixture), Ok(()));
-    }
-
-    #[test]
-    fn find_fixtures_reads_every_text_file_under_a_crate_fixture_folder() {
-        // Arrange
-        let root = temp_dir("find");
-        let fixtures = root.join("crates/alpha/tests/fixtures");
-        fs::create_dir_all(&fixtures).unwrap();
-        fs::create_dir_all(root.join("crates/beta/tests")).unwrap();
-        fs::write(fixtures.join("one.txt"), "").unwrap();
-        fs::write(fixtures.join("notes.md"), "").unwrap();
-
-        // Act
-        let found = find_fixtures(&root);
-
-        // Assert
-        assert_eq!(found, vec![fixtures.join("one.txt")]);
-        fs::remove_dir_all(root).unwrap();
     }
 }

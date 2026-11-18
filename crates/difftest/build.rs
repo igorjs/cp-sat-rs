@@ -106,6 +106,12 @@ mod reference {
         // Test and binary targets find the shared libraries through this path,
         // with no DYLD_LIBRARY_PATH or LD_LIBRARY_PATH.
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
+        // The Linux loader ignores DT_RUNPATH, the default tag, when it looks
+        // for the dependencies of the shared libraries (abseil, re2). DT_RPATH
+        // is searched for them too.
+        if env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "linux") {
+            println!("cargo:rustc-link-arg=-Wl,--disable-new-dtags");
+        }
     }
 }
 
