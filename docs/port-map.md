@@ -18,7 +18,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 |---|---|---|
 | 0 | 0 | 0 |
 | 1 | 0 | 0 |
-| 2 | 0 | 0 |
+| 2 | 8 | 23 |
 | 3 | 0 | 0 |
 | 4 | 0 | 61 |
 | 5 | 0 | 0 |
@@ -237,8 +237,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/diffn.h` | 198 | `sat/diffn_test.cc` | 3 | `sat/2d_orthogonal_packing.h`, `sat/diffn_util.h`, `sat/disjunctive.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/no_overlap_2d_helper.h`, `sat/sat_literal.h`, `sat/scheduling_helpers.h`, `sat/synchronization.h`, `sat/util.h`, `util/bitset.h`, `util/time_limit.h` | 15 | - | todo |
 | sat | `sat/diffn_cuts.cc` | 695 | none | - | `base/stl_util.h`, `base/strong_vector.h`, `sat/cuts.h`, `sat/diffn_cuts.h`, `sat/diffn_util.h`, `sat/implied_bounds.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/linear_constraint.h`, `sat/linear_constraint_manager.h`, `sat/model.h`, `sat/no_overlap_2d_helper.h`, `sat/sat_literal.h`, `sat/scheduling_helpers.h`, `sat/util.h`, `util/strong_integers.h` | 16 | - | todo |
 | sat | `sat/diffn_cuts.h` | 108 | none | - | `sat/cuts.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/no_overlap_2d_helper.h`, `sat/scheduling_helpers.h` | 15 | - | todo |
-| sat | `sat/diffn_util.cc` | 2449 | `sat/diffn_util_test.cc` | 28 | `base/log_severity.h`, `base/stl_util.h`, `base/strong_vector.h`, `graph/connected_components.h`, `graph/strongly_connected_components.h`, `sat/diffn_util.h`, `sat/integer_base.h`, `sat/scheduling_helpers.h`, `sat/util.h`, `util/fixed_shape_binary_tree.h`, `util/integer_pq.h`, `util/strong_integers.h` | 14 | 0 | todo |
-| sat | `sat/diffn_util.h` | 789 | `sat/diffn_util_test.cc` | 28 | `sat/integer_base.h`, `sat/scheduling_helpers.h`, `sat/util.h`, `util/strong_integers.h` | 13 | 0 | todo |
+| sat | `sat/diffn_util.cc` | 2449 | `sat/diffn_util_test.cc` | 28 | `base/log_severity.h`, `base/stl_util.h`, `base/strong_vector.h`, `graph/connected_components.h`, `graph/strongly_connected_components.h`, `sat/diffn_util.h`, `sat/integer_base.h`, `sat/scheduling_helpers.h`, `sat/util.h`, `util/fixed_shape_binary_tree.h`, `util/integer_pq.h`, `util/strong_integers.h` | 14 | 0 | partial |
+| sat | `sat/diffn_util.h` | 789 | `sat/diffn_util_test.cc` | 28 | `sat/integer_base.h`, `sat/scheduling_helpers.h`, `sat/util.h`, `util/strong_integers.h` | 13 | 0 | partial |
 | sat | `sat/diffn_util_benchmark.cc` | 233 | none | - | `sat/2d_orthogonal_packing_testing.h`, `sat/diffn_util.h`, `sat/integer_base.h` | 15 | - | todo |
 | sat | `sat/diophantine.cc` | 241 | `sat/diophantine_test.cc` | 6 | `base/mathutil.h`, `base/types.h`, `sat/diophantine.h`, `sat/util.h` | 3 | - | todo |
 | sat | `sat/diophantine.h` | 133 | `sat/diophantine_test.cc` | 6 | - | 0 | - | todo |
@@ -265,8 +265,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | sat | `sat/inclusion.h` | 578 | `sat/inclusion_test.cc` | 6 | `base/types.h`, `sat/util.h`, `util/bitset.h`, `util/time_limit.h` | 3 | - | todo |
 | sat | `sat/integer.cc` | 2801 | `sat/integer_test.cc` | 59 | `base/log_severity.h`, `base/strong_vector.h`, `base/types.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/model.h`, `sat/sat_assignment.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/sat_trail.h`, `util/bitset.h`, `util/deterministic_time.h`, `util/rev.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/strong_integers.h`, `util/time_limit.h` | 9 | - | todo |
 | sat | `sat/integer.h` | 1999 | `sat/integer_test.cc` | 59 | `base/strong_vector.h`, `base/types.h`, `sat/integer_base.h`, `sat/lrat_proof_handler.h`, `sat/model.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/sat_trail.h`, `util/bitset.h`, `util/rev.h`, `util/sorted_interval_list.h`, `util/strong_integers.h`, `util/time_limit.h` | 8 | - | todo |
-| sat | `sat/integer_base.cc` | 327 | `sat/integer_base_test.cc` | 6 | `base/mathutil.h`, `base/types.h`, `sat/integer_base.h` | 3 | - | todo |
-| sat | `sat/integer_base.h` | 680 | `sat/integer_base_test.cc` | 6 | `base/strong_vector.h`, `sat/sat_literal.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/strong_integers.h` | 2 | 0 | todo |
+| sat | `sat/integer_base.cc` | 327 | `sat/integer_base_test.cc` | 6 | `base/mathutil.h`, `base/types.h`, `sat/integer_base.h` | 3 | - | partial |
+| sat | `sat/integer_base.h` | 680 | `sat/integer_base_test.cc` | 6 | `base/strong_vector.h`, `sat/sat_literal.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h`, `util/strong_integers.h` | 2 | 0 | partial |
 | sat | `sat/integer_benchmark.cc` | 113 | none | - | `sat/integer_base.h` | 3 | - | todo |
 | sat | `sat/integer_expr.cc` | 2116 | `sat/integer_expr_test.cc` | 74 | `base/mathutil.h`, `base/stl_util.h`, `base/types.h`, `sat/enforcement.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/integer_expr.h`, `sat/linear_constraint.h`, `sat/model.h`, `sat/sat_literal.h`, `sat/sat_trail.h`, `sat/util.h`, `util/deterministic_time.h`, `util/strong_integers.h`, `util/time_limit.h` | 14 | - | todo |
 | sat | `sat/integer_expr.h` | 817 | `sat/integer_expr_test.cc` | 74 | `sat/enforcement.h`, `sat/enforcement_helper.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/linear_constraint.h`, `sat/linear_propagation.h`, `sat/model.h`, `sat/old_precedences_propagator.h`, `sat/sat_assignment.h`, `sat/sat_literal.h`, `sat/sat_solver.h`, `sat/sat_trail.h`, `util/strong_integers.h`, `util/time_limit.h` | 13 | - | todo |

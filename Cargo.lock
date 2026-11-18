@@ -142,8 +142,10 @@ dependencies = [
  "cpsat-proto",
  "cpsat-testutil",
  "cpsat-util",
+ "log",
  "prost",
  "prost-reflect",
+ "rand_chacha",
 ]
 
 [[package]]
