@@ -23,8 +23,10 @@ readonly STAMP_NAME=.reference-commit
 readonly CACHE_ROOT="$HOME/.cache/cp-sat-rs"
 
 # CP-SAT is part of the core library, which has no switch. Every wrapper and
-# optional component is off, and so is every other solver except BOP and GLOP,
-# which upstream does not support turning off.
+# optional component is off, and so is every other solver that needs a library.
+# BOP and GLOP stay on because upstream does not support turning them off. The
+# Gurobi and Xpress loaders stay on because the core library fails to link
+# without the Gurobi one, and they load their library only when asked.
 #
 # BUILD_DEPS=ON would build bzip2 from its moving master branch, so each
 # dependency is chosen by name: the ones upstream pins by tag are built, and
@@ -58,8 +60,8 @@ readonly CMAKE_OPTIONS=(
   -DUSE_GLPK=OFF
   -DUSE_PDLP=OFF
   -DUSE_CPLEX=OFF
-  -DUSE_GUROBI=OFF
-  -DUSE_XPRESS=OFF
+  -DUSE_GUROBI=ON
+  -DUSE_XPRESS=ON
 )
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
