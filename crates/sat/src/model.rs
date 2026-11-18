@@ -15,70 +15,289 @@
 
 //! The container every solver component is fetched from.
 //!
-//! A component type implements `Component`. `Model::get_or_create` builds it once with
-//! `Component::new`, which may fetch the components it needs from the model, and hands out
-//! an `Rc<RefCell<T>>`. A component keeps another one as a `Handle`, which does not own it,
-//! and borrows it for one call with `handle.get().borrow_mut()`.
+//! The model owns each component in a heap box that never moves and hands out a `Handle`,
+//! a pointer that derefs to `&T`. A component keeps handles to other components as
+//! upstream keeps raw pointers, and calls them while it is itself running. No `&mut` of a
+//! component is ever made: a method takes `&self` and keeps mutable state in per-field
+//! `Cell` or `DebugRefCell`. Two rules keep this sound, and a debug build checks both:
 //!
-//! A component that is called with `&mut` access to another one never borrows that one again
-//! through a handle: it uses the argument. Borrowing twice panics.
+//! - Use a handle only while its component is alive. Components drop in reverse order of
+//!   creation, so a `Drop` impl may use the handles a component got in `new`, never one
+//!   it got later.
+//! - Drop a `DebugRefCell` borrow before any call that may come back to the same field.
+//!
+//! A release build does not check them, and breaking one is undefined behaviour.
+//!
+//! A model is not `Send`. A worker thread builds its own model and keeps it for life. An
+//! object that workers share is an `Arc<T>` with `T: Send + Sync`, made by the thread that
+//! starts the workers, and each worker registers a clone in its model with `register`.
 
-use std::any::{Any, TypeId};
-use std::cell::RefCell;
+use std::any::TypeId;
+#[cfg(debug_assertions)]
+use std::cell::Cell;
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
+use std::marker::PhantomPinned;
+use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
+use std::ptr::NonNull;
+#[cfg(debug_assertions)]
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 /// A type that `Model` can build. It is the `T(Model* model)` constructor, or `T()` when
 /// `new` ignores the model.
 pub trait Component: Sized + 'static {
     fn new(model: &Model) -> Self;
 
-    /// Runs after the new object is in the model. Upstream constructors that pass `this` to
-    /// another component, such as `model->GetOrCreate<SatSolver>()->AddPropagator(this)`
-    /// (`sat/integer.h:558`), do that here, since a Rust constructor has no address yet.
-    fn after_create(_this: &Rc<RefCell<Self>>, _model: &Model) {}
+    /// Runs once the object has its final address, before the model records it. Upstream
+    /// constructors that pass `this` to another component, such as
+    /// `model->GetOrCreate<SatSolver>()->AddPropagator(this)` (`sat/integer.h:558`), do
+    /// that here.
+    fn after_create(_this: &Handle<Self>, _model: &Model) {}
 }
 
-/// A pointer from one component to another that the component does not own, as the raw
-/// pointer members of the upstream components.
-pub struct Handle<T: ?Sized>(Weak<RefCell<T>>);
-
-impl<T: ?Sized> Handle<T> {
-    pub fn new(component: &Rc<RefCell<T>>) -> Self {
-        Handle(Rc::downgrade(component))
-    }
-
-    /// Panics when the model that owned the component has been dropped.
-    pub fn get(&self) -> Rc<RefCell<T>> {
-        self.0
-            .upgrade()
-            .expect("the model that owns the component was dropped")
-    }
+/// A pointer to a component, or to a field of one, as the raw pointer members upstream.
+pub struct Handle<T: ?Sized> {
+    ptr: NonNull<T>,
+    #[cfg(debug_assertions)]
+    alive: Weak<()>,
 }
 
 impl<T: ?Sized> Clone for Handle<T> {
     fn clone(&self) -> Self {
-        Handle(self.0.clone())
+        Handle {
+            ptr: self.ptr,
+            #[cfg(debug_assertions)]
+            alive: self.alive.clone(),
+        }
     }
 }
 
-/// Owns everything related to a particular optimization model.
+impl<T: ?Sized> Deref for Handle<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        #[cfg(debug_assertions)]
+        assert!(
+            self.alive.strong_count() > 0,
+            "a handle was used after its component was dropped"
+        );
+        // SAFETY: `ptr` points into an allocation that the model frees only when it drops
+        // the component, and the rule of the module says the component is still alive.
+        // Only shared references are ever made from it, so handles may alias.
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T: ?Sized> Handle<T> {
+    /// A handle to a field of the component, as `&modified_vars_` upstream
+    /// (`sat/integer.cc:2512`). It lives as long as the component does.
+    pub fn field<U: ?Sized>(&self, field: for<'a> fn(&'a T) -> &'a U) -> Handle<U> {
+        Handle {
+            ptr: NonNull::from(field(&**self)),
+            #[cfg(debug_assertions)]
+            alive: self.alive.clone(),
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn as_non_null(&self) -> NonNull<T> {
+        self.ptr
+    }
+
+    /// Used by `handle_as_dyn!`.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be `self.as_non_null()` coerced to a trait object.
+    #[doc(hidden)]
+    pub unsafe fn with_coerced_ptr<U: ?Sized>(&self, ptr: NonNull<U>) -> Handle<U> {
+        Handle {
+            ptr,
+            #[cfg(debug_assertions)]
+            alive: self.alive.clone(),
+        }
+    }
+}
+
+/// Turns a `Handle<T>` into a handle of a trait object `T` implements, as `Rc` coerces.
+/// Stable Rust lets no user type coerce, so a typed `let` does the coercion here.
+#[macro_export]
+macro_rules! handle_as_dyn {
+    ($handle:expr, $target:ty) => {{
+        let handle = &$handle;
+        let ptr: ::std::ptr::NonNull<$target> = handle.as_non_null();
+        // SAFETY: the typed `let` above compiles only for an unsized coercion of the same
+        // pointer.
+        unsafe { handle.with_coerced_ptr(ptr) }
+    }};
+}
+
+/// A `RefCell` whose borrow flag exists in debug builds only. It holds the mutable state
+/// of a component that is not `Copy`.
+///
+/// Drop a borrow before any call that may come back to the same field. A debug build
+/// panics when two borrows overlap; in a release build the overlap is undefined behaviour.
 #[derive(Default)]
+pub struct DebugRefCell<T> {
+    value: UnsafeCell<T>,
+    #[cfg(debug_assertions)]
+    flag: Cell<isize>,
+}
+
+pub struct DebugRef<'a, T> {
+    cell: &'a DebugRefCell<T>,
+}
+
+pub struct DebugRefMut<'a, T> {
+    cell: &'a DebugRefCell<T>,
+}
+
+impl<T> DebugRefCell<T> {
+    pub fn new(value: T) -> Self {
+        DebugRefCell {
+            value: UnsafeCell::new(value),
+            #[cfg(debug_assertions)]
+            flag: Cell::new(0),
+        }
+    }
+
+    pub fn borrow(&self) -> DebugRef<'_, T> {
+        #[cfg(debug_assertions)]
+        {
+            assert!(
+                self.flag.get() >= 0,
+                "DebugRefCell already mutably borrowed"
+            );
+            self.flag.set(self.flag.get() + 1);
+        }
+        DebugRef { cell: self }
+    }
+
+    pub fn borrow_mut(&self) -> DebugRefMut<'_, T> {
+        #[cfg(debug_assertions)]
+        {
+            assert!(self.flag.get() == 0, "DebugRefCell already borrowed");
+            self.flag.set(-1);
+        }
+        DebugRefMut { cell: self }
+    }
+}
+
+impl<T> Deref for DebugRef<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        // SAFETY: by the rule of `DebugRefCell`, no `DebugRefMut` of the cell is alive.
+        unsafe { &*self.cell.value.get() }
+    }
+}
+
+impl<T> Deref for DebugRefMut<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        // SAFETY: by the rule of `DebugRefCell`, this is the only borrow of the cell.
+        unsafe { &*self.cell.value.get() }
+    }
+}
+
+impl<T> DerefMut for DebugRefMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        // SAFETY: by the rule of `DebugRefCell`, this is the only borrow of the cell.
+        unsafe { &mut *self.cell.value.get() }
+    }
+}
+
+#[cfg(debug_assertions)]
+impl<T> Drop for DebugRef<'_, T> {
+    fn drop(&mut self) {
+        self.cell.flag.set(self.cell.flag.get() - 1);
+    }
+}
+
+#[cfg(debug_assertions)]
+impl<T> Drop for DebugRefMut<'_, T> {
+    fn drop(&mut self) {
+        self.cell.flag.set(0);
+    }
+}
+
+/// An object the model frees when it is dropped.
+struct Owned {
+    ptr: NonNull<()>,
+    free: unsafe fn(NonNull<()>),
+    #[cfg(debug_assertions)]
+    alive: Rc<()>,
+}
+
+/// A singleton: where it is, and in a debug build whether it is alive.
+#[derive(Clone)]
+struct Singleton {
+    ptr: NonNull<()>,
+    #[cfg(debug_assertions)]
+    alive: Weak<()>,
+}
+
+/// # Safety
+///
+/// `ptr` comes from `Box::<T>::leak` and is freed once.
+unsafe fn free_box<T>(ptr: NonNull<()>) {
+    // SAFETY: by the contract of the function.
+    drop(unsafe { Box::from_raw(ptr.cast::<T>().as_ptr()) });
+}
+
+/// # Safety
+///
+/// `ptr` comes from `Arc::<T>::into_raw` and is freed once.
+unsafe fn free_arc<T>(ptr: NonNull<()>) {
+    // SAFETY: by the contract of the function.
+    drop(unsafe { Arc::from_raw(ptr.cast::<T>().as_ptr()) });
+}
+
+/// Owns everything related to a particular optimization model.
+///
+/// Components point into the model, so it never moves: it is built in a pinned box.
 pub struct Model {
     name: String,
-    // Map of the type to a "singleton" of that type. It holds a second `Rc` of an owned
-    // component, so `drop` empties it first.
-    singletons: RefCell<HashMap<TypeId, Rc<dyn Any>>>,
+    // Map of the type to a "singleton" of that type.
+    singletons: RefCell<HashMap<TypeId, Singleton>>,
     // The list of items to delete.
-    cleanup_list: RefCell<Vec<Rc<dyn Any>>>,
+    cleanup_list: RefCell<Vec<Owned>>,
+    #[cfg(debug_assertions)]
+    alive: Rc<()>,
+    _pinned: PhantomPinned,
 }
 
 impl Model {
+    /// The upstream default constructor. A model has no `Default` impl, since it is never
+    /// built by value.
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Pin<Box<Model>> {
+        Model::new("")
+    }
+
     /// Names the model for debugging or logging.
-    pub fn new(name: impl Into<String>) -> Self {
-        let mut model = Model::default();
-        model.name = name.into();
-        model
+    pub fn new(name: impl Into<String>) -> Pin<Box<Model>> {
+        Box::pin(Model {
+            name: name.into(),
+            singletons: RefCell::default(),
+            cleanup_list: RefCell::default(),
+            #[cfg(debug_assertions)]
+            alive: Rc::new(()),
+            _pinned: PhantomPinned,
+        })
+    }
+
+    /// A handle to the model, for a component that keeps `Model* model_` as a member.
+    pub fn handle(&self) -> Handle<Model> {
+        Handle {
+            // Every `Model` is built pinned in a box, so `self` does not move.
+            ptr: NonNull::from(self),
+            #[cfg(debug_assertions)]
+            alive: Rc::downgrade(&self.alive),
+        }
     }
 
     /// `model.Add(f)`: calls `f` with the model.
@@ -96,62 +315,69 @@ impl Model {
     ///
     /// IMPORTANT: the `Component::new` functions shouldn't form a cycle between each other,
     /// otherwise this will crash the program.
-    pub fn get_or_create<T: Component>(&self) -> Rc<RefCell<T>> {
+    pub fn get_or_create<T: Component>(&self) -> Handle<T> {
         if let Some(found) = self.get_singleton::<T>() {
             return found;
         }
 
         // New element.
-        let new_t = Rc::new(RefCell::new(T::new(self)));
+        let (new_t, owned) = self.construct::<T>();
         self.singletons
             .borrow_mut()
-            .insert(TypeId::of::<T>(), new_t.clone());
-        self.take_ownership_of(new_t.clone());
-        T::after_create(&new_t, self);
+            .insert(TypeId::of::<T>(), singleton_of(&new_t));
+        self.cleanup_list.borrow_mut().push(owned);
         new_t
     }
 
     /// Like `get_or_create` but does not create the object if it does not exist.
-    ///
-    /// Upstream returns a const pointer here. The Rust borrow, `borrow` or `borrow_mut`,
-    /// decides whether the caller reads or writes.
-    pub fn get_singleton<T: 'static>(&self) -> Option<Rc<RefCell<T>>> {
-        let found = self.singletons.borrow().get(&TypeId::of::<T>())?.clone();
-        Some(downcast(found))
+    pub fn get_singleton<T: 'static>(&self) -> Option<Handle<T>> {
+        let found = self.singletons.borrow().get(&TypeId::of::<T>()).cloned()?;
+        Some(Handle {
+            ptr: found.ptr.cast::<T>(),
+            #[cfg(debug_assertions)]
+            alive: found.alive,
+        })
     }
 
     /// Same as `get_singleton`; upstream returns a mutable pointer here.
-    pub fn mutable<T: 'static>(&self) -> Option<Rc<RefCell<T>>> {
+    pub fn mutable<T: 'static>(&self) -> Option<Handle<T>> {
         self.get_singleton::<T>()
     }
 
     /// Gives ownership of an object to this model. It is destroyed when the model is.
-    pub fn take_ownership<T: 'static>(&self, t: T) -> Rc<RefCell<T>> {
-        let t = Rc::new(RefCell::new(t));
-        self.take_ownership_of(t.clone());
-        t
+    pub fn take_ownership<T: 'static>(&self, t: T) -> Handle<T> {
+        let ptr = NonNull::from(Box::leak(Box::new(t)));
+        let (handle, owned) = self.own(ptr, free_box::<T>);
+        self.cleanup_list.borrow_mut().push(owned);
+        handle
     }
 
     /// Returns a non-singleton object owned by the model and created with
-    /// `Component::new`.
-    pub fn create<T: Component>(&self) -> Rc<RefCell<T>> {
-        let new_t = Rc::new(RefCell::new(T::new(self)));
-        self.take_ownership_of(new_t.clone());
+    /// `Component::new`, as `get_or_create` creates one.
+    pub fn create<T: Component>(&self) -> Handle<T> {
+        let (new_t, owned) = self.construct::<T>();
+        self.cleanup_list.borrow_mut().push(owned);
         new_t
     }
 
-    /// Registers a non-owned class that will be "singleton" in the model: the caller keeps
-    /// its own `Rc` and the model does not destroy the object.
+    /// Registers a class that will be "singleton" in the model. The model keeps a clone of
+    /// the `Arc`, so the object lives at least as long as the model; it is destroyed when
+    /// its last `Arc` is.
     ///
     /// It is an error to call this on an already registered class.
-    pub fn register<T: 'static>(&self, non_owned_class: Rc<RefCell<T>>) {
-        let mut singletons = self.singletons.borrow_mut();
+    pub fn register<T: 'static>(&self, non_owned_class: Arc<T>) {
         let type_id = TypeId::of::<T>();
         assert!(
-            !singletons.contains_key(&type_id),
+            !self.singletons.borrow().contains_key(&type_id),
             "the type is already registered in the model"
         );
-        singletons.insert(type_id, non_owned_class);
+        let ptr =
+            NonNull::new(Arc::into_raw(non_owned_class).cast_mut()).expect("an Arc is never null");
+        let (handle, owned) = self.own(ptr, free_arc::<T>);
+        self.singletons
+            .borrow_mut()
+            .insert(type_id, singleton_of(&handle));
+        self.cleanup_list.borrow_mut().push(owned);
     }
 
     pub fn unregister<T: 'static>(&self) {
@@ -162,35 +388,73 @@ impl Model {
         &self.name
     }
 
-    fn take_ownership_of<T: 'static>(&self, t: Rc<RefCell<T>>) {
-        self.cleanup_list.borrow_mut().push(t);
+    /// Runs the construction steps that `get_or_create` and `create` share. The caller
+    /// records the object in the cleanup list after `after_create`, as upstream records it
+    /// after the constructor body.
+    fn construct<T: Component>(&self) -> (Handle<T>, Owned) {
+        let ptr = NonNull::from(Box::leak(Box::new(T::new(self))));
+        let (new_t, owned) = self.own(ptr, free_box::<T>);
+        T::after_create(&new_t, self);
+        (new_t, owned)
+    }
+
+    fn own<T>(&self, ptr: NonNull<T>, free: unsafe fn(NonNull<()>)) -> (Handle<T>, Owned) {
+        #[cfg(debug_assertions)]
+        let alive = Rc::new(());
+        let handle = Handle {
+            ptr,
+            #[cfg(debug_assertions)]
+            alive: Rc::downgrade(&alive),
+        };
+        let owned = Owned {
+            ptr: ptr.cast(),
+            free,
+            #[cfg(debug_assertions)]
+            alive,
+        };
+        (handle, owned)
+    }
+}
+
+fn singleton_of<T>(handle: &Handle<T>) -> Singleton {
+    Singleton {
+        ptr: handle.ptr.cast(),
+        #[cfg(debug_assertions)]
+        alive: handle.alive.clone(),
     }
 }
 
 impl Drop for Model {
     fn drop(&mut self) {
+        // A component that reaches the model while it is dropped panics in a debug build.
+        #[cfg(debug_assertions)]
+        {
+            self.alive = Rc::new(());
+        }
+        self.singletons.get_mut().clear();
         // The order of deletion seems to be platform dependent.
         // We force a reverse order on the cleanup vector.
-        self.singletons.get_mut().clear();
-        let cleanup_list = self.cleanup_list.get_mut();
-        while cleanup_list.pop().is_some() {}
+        let cleanup_list = std::mem::take(self.cleanup_list.get_mut());
+        for owned in cleanup_list.into_iter().rev() {
+            #[cfg(debug_assertions)]
+            drop(owned.alive);
+            // SAFETY: `free` matches how `ptr` was made, and each entry is freed once.
+            unsafe { (owned.free)(owned.ptr) };
+        }
     }
-}
-
-fn downcast<T: 'static>(found: Rc<dyn Any>) -> Rc<RefCell<T>> {
-    found
-        .downcast::<RefCell<T>>()
-        .unwrap_or_else(|_| unreachable!("a singleton is stored under the id of its own type"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use cpsat_testutil::expect_death;
+    use std::cell::Cell;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicI64, Ordering};
 
     #[derive(Default)]
     struct A {
-        name: String,
+        name: DebugRefCell<String>,
     }
 
     impl Component for A {
@@ -206,14 +470,14 @@ mod tests {
     impl Component for B {
         fn new(model: &Model) -> Self {
             B {
-                a: Handle::new(&model.get_or_create::<A>()),
+                a: model.get_or_create::<A>(),
             }
         }
     }
 
     impl B {
         fn name(&self) -> String {
-            self.a.get().borrow().name.clone()
+            self.a.name.borrow().clone()
         }
     }
 
@@ -224,13 +488,12 @@ mod tests {
 
         // Act
         let b = model.get_or_create::<B>();
-        model.get_or_create::<A>().borrow_mut().name = "test".to_string();
+        *model.get_or_create::<A>().name.borrow_mut() = "test".to_string();
 
         // Assert
-        assert_eq!("test", b.borrow().name());
+        assert_eq!("test", b.name());
     }
 
-    #[derive(Default)]
     struct C1;
 
     impl Component for C1 {
@@ -270,35 +533,34 @@ mod tests {
         model.get_or_create::<C2>();
 
         // Assert
-        assert_eq!(model.get_or_create::<C3>().borrow().name, "model");
+        assert_eq!(model.get_or_create::<C3>().name, "model");
     }
 
     #[test]
     fn model_test_register() {
         // Arrange
         let model = Model::default();
-        let c3 = Rc::new(RefCell::new(C3 {
+        let c3 = Arc::new(C3 {
             name: "Shared struct".to_string(),
-        }));
+        });
 
         // Act
         model.register(c3.clone());
 
         // Assert
-        assert_eq!(model.get_or_create::<C3>().borrow().name, c3.borrow().name);
+        assert_eq!(model.get_or_create::<C3>().name, c3.name);
     }
 
     #[test]
     fn model_test_register_death_test() {
         // Arrange
         let model = Model::default();
-        let c3 = Rc::new(RefCell::new(C3 {
+        model.register(Arc::new(C3 {
             name: String::new(),
         }));
-        model.register(c3);
-        let c3_2 = Rc::new(RefCell::new(C3 {
+        let c3_2 = Arc::new(C3 {
             name: String::new(),
-        }));
+        });
 
         // Act and Assert
         expect_death(
@@ -312,9 +574,9 @@ mod tests {
         // Arrange
         let model = Model::default();
         model.get_or_create::<C3>();
-        let c3 = Rc::new(RefCell::new(C3 {
+        let c3 = Arc::new(C3 {
             name: String::new(),
-        }));
+        });
 
         // Act and Assert
         expect_death(
@@ -323,92 +585,32 @@ mod tests {
         );
     }
 
-    // The next four tests prove the form of the container on the cases the SAT core needs.
+    // A small copy of the SAT core: the solver calls its propagators with the trail, the
+    // integer trail enqueues on the trail through its own handle and tells the solver the
+    // model is unsat, and the watcher runs a constraint that writes the watcher's bitset
+    // through the integer trail and asks to be called again.
 
-    impl B {
-        fn rename(&self, name: &str) {
-            self.a.get().borrow_mut().name = name.to_string();
-        }
+    type Literal = i32;
+
+    const DECISION: Literal = 1;
+    const FIXED: Literal = -103;
+    const TARGET: i64 = 3;
+
+    fn bound_literal(bound: i64) -> Literal {
+        100 + bound as Literal
     }
 
-    #[test]
-    fn a_component_reads_another_through_its_handle() {
-        // Arrange
-        let model = Model::default();
-        let b = model.get_or_create::<B>();
-
-        // Act
-        model.get_or_create::<A>().borrow_mut().name = "read".to_string();
-
-        // Assert
-        assert_eq!(b.borrow().name(), "read");
+    trait SatPropagator {
+        fn propagate(&self, trail: &Trail) -> bool;
     }
 
-    #[test]
-    fn a_component_mutates_another_through_its_handle() {
-        // Arrange
-        let model = Model::default();
-        let b = model.get_or_create::<B>();
-
-        // Act
-        b.borrow().rename("changed");
-
-        // Assert
-        assert_eq!(model.get_or_create::<A>().borrow().name, "changed");
-    }
-
-    struct P {
-        q: Option<Handle<Q>>,
-        value: i32,
-    }
-
-    struct Q {
-        p: Handle<P>,
-        value: i32,
-    }
-
-    impl Component for P {
-        fn new(_model: &Model) -> Self {
-            P { q: None, value: 0 }
-        }
-    }
-
-    impl Component for Q {
-        fn new(model: &Model) -> Self {
-            Q {
-                p: Handle::new(&model.get_or_create::<P>()),
-                value: 0,
-            }
-        }
-
-        fn after_create(this: &Rc<RefCell<Self>>, model: &Model) {
-            model.get_or_create::<P>().borrow_mut().q = Some(Handle::new(this));
-        }
-    }
-
-    #[test]
-    fn two_components_hold_handles_to_each_other() {
-        // Arrange
-        let model = Model::default();
-        let q = model.get_or_create::<Q>();
-        let p = model.get_or_create::<P>();
-
-        // Act
-        q.borrow().p.get().borrow_mut().value = 5;
-        p.borrow().q.as_ref().unwrap().get().borrow_mut().value = 7;
-
-        // Assert
-        assert_eq!((p.borrow().value, q.borrow().value), (5, 7));
-    }
-
-    trait Propagator {
-        fn propagate(&mut self, trail: &mut Trail) -> bool;
+    trait PropagatorInterface {
+        fn propagate(&self) -> bool;
     }
 
     #[derive(Default)]
     struct Trail {
-        assigned: Vec<i32>,
-        propagators: Vec<Rc<RefCell<dyn Propagator>>>,
+        literals: DebugRefCell<Vec<Literal>>,
     }
 
     impl Component for Trail {
@@ -418,71 +620,521 @@ mod tests {
     }
 
     impl Trail {
-        fn propagate(&mut self) {
-            let mut i = 0;
-            while i < self.propagators.len() {
-                let propagator = self.propagators[i].clone();
-                propagator.borrow_mut().propagate(self);
-                i += 1;
+        fn index(&self) -> usize {
+            self.literals.borrow().len()
+        }
+
+        fn literal_is_true(&self, literal: Literal) -> bool {
+            self.literals.borrow().contains(&literal)
+        }
+
+        fn enqueue(&self, true_literal: Literal) {
+            self.literals.borrow_mut().push(true_literal);
+        }
+    }
+
+    struct SatSolver {
+        trail: Handle<Trail>,
+        propagators: DebugRefCell<Vec<Handle<dyn SatPropagator>>>,
+        model_is_unsat: Cell<bool>,
+    }
+
+    impl Component for SatSolver {
+        fn new(model: &Model) -> Self {
+            SatSolver {
+                trail: model.get_or_create::<Trail>(),
+                propagators: DebugRefCell::default(),
+                model_is_unsat: Cell::new(false),
             }
         }
     }
 
-    struct Pusher {
-        other: Handle<A>,
+    impl SatSolver {
+        fn add_propagator(&self, propagator: Handle<dyn SatPropagator>) {
+            self.propagators.borrow_mut().push(propagator);
+        }
+
+        fn notify_that_model_is_unsat(&self) {
+            self.model_is_unsat.set(true);
+        }
+
+        fn propagate(&self) -> bool {
+            loop {
+                let old_index = self.trail.index();
+                let num_propagators = self.propagators.borrow().len();
+                for i in 0..num_propagators {
+                    let propagator = self.propagators.borrow()[i].clone();
+                    if !propagator.propagate(&self.trail) {
+                        return false;
+                    }
+                    if self.trail.index() > old_index {
+                        break;
+                    }
+                }
+                if self.trail.index() == old_index {
+                    return true;
+                }
+            }
+        }
     }
 
-    impl Propagator for Pusher {
-        fn propagate(&mut self, trail: &mut Trail) -> bool {
-            self.other.get().borrow_mut().name.push('!');
-            trail.assigned.push(1);
+    struct IntegerTrail {
+        trail: Handle<Trail>,
+        sat_solver: Handle<SatSolver>,
+        watchers: DebugRefCell<Vec<Handle<DebugRefCell<Vec<usize>>>>>,
+        lower_bound: Cell<i64>,
+        propagation_trail_index: Cell<usize>,
+    }
+
+    impl Component for IntegerTrail {
+        fn new(model: &Model) -> Self {
+            IntegerTrail {
+                trail: model.get_or_create::<Trail>(),
+                sat_solver: model.get_or_create::<SatSolver>(),
+                watchers: DebugRefCell::default(),
+                lower_bound: Cell::new(0),
+                propagation_trail_index: Cell::new(0),
+            }
+        }
+
+        fn after_create(this: &Handle<Self>, model: &Model) {
+            model
+                .get_or_create::<SatSolver>()
+                .add_propagator(handle_as_dyn!(this, dyn SatPropagator));
+        }
+    }
+
+    impl IntegerTrail {
+        fn register_watcher(&self, bitset: Handle<DebugRefCell<Vec<usize>>>) {
+            self.watchers.borrow_mut().push(bitset);
+        }
+
+        fn enqueue(&self, var: usize, bound: i64) {
+            if bound <= self.lower_bound.get() {
+                return;
+            }
+            self.lower_bound.set(bound);
+            for bitset in self.watchers.borrow().iter() {
+                bitset.borrow_mut().push(var);
+            }
+            self.trail.enqueue(bound_literal(bound));
+        }
+    }
+
+    impl SatPropagator for IntegerTrail {
+        fn propagate(&self, trail: &Trail) -> bool {
+            if self.trail.literal_is_true(-FIXED) {
+                self.sat_solver.notify_that_model_is_unsat();
+                return false;
+            }
+            if !self.trail.literal_is_true(FIXED) {
+                self.trail.enqueue(FIXED);
+            }
+            while self.propagation_trail_index.get() < trail.index() {
+                let index = self.propagation_trail_index.get();
+                self.propagation_trail_index.set(index + 1);
+                if trail.literals.borrow()[index] == DECISION {
+                    self.enqueue(0, 1);
+                }
+            }
             true
         }
     }
 
-    impl Component for Pusher {
+    #[derive(Default)]
+    struct GenericLiteralWatcher {
+        modified_vars: DebugRefCell<Vec<usize>>,
+        watchers: DebugRefCell<Vec<Handle<dyn PropagatorInterface>>>,
+        call_again: Cell<bool>,
+        writes_seen_while_running: Cell<usize>,
+    }
+
+    impl Component for GenericLiteralWatcher {
+        fn new(_model: &Model) -> Self {
+            GenericLiteralWatcher::default()
+        }
+
+        fn after_create(this: &Handle<Self>, model: &Model) {
+            model
+                .get_or_create::<SatSolver>()
+                .add_propagator(handle_as_dyn!(this, dyn SatPropagator));
+            model
+                .get_or_create::<IntegerTrail>()
+                .register_watcher(this.field(|watcher| &watcher.modified_vars));
+        }
+    }
+
+    impl GenericLiteralWatcher {
+        fn register(&self, propagator: Handle<dyn PropagatorInterface>) {
+            self.watchers.borrow_mut().push(propagator);
+        }
+
+        fn call_again_during_this_propagation(&self) {
+            self.call_again.set(true);
+        }
+    }
+
+    impl SatPropagator for GenericLiteralWatcher {
+        fn propagate(&self, _trail: &Trail) -> bool {
+            if self.modified_vars.borrow_mut().drain(..).count() == 0 {
+                return true;
+            }
+            let num_watchers = self.watchers.borrow().len();
+            for id in 0..num_watchers {
+                let watcher = self.watchers.borrow()[id].clone();
+                loop {
+                    self.call_again.set(false);
+                    if !watcher.propagate() {
+                        return false;
+                    }
+                    let seen = self.modified_vars.borrow_mut().drain(..).count();
+                    self.writes_seen_while_running
+                        .set(self.writes_seen_while_running.get() + seen);
+                    if !self.call_again.get() {
+                        break;
+                    }
+                }
+            }
+            true
+        }
+    }
+
+    struct LowerBoundPusher {
+        model: Handle<Model>,
+        watcher: Handle<GenericLiteralWatcher>,
+        calls: Cell<i32>,
+    }
+
+    impl Component for LowerBoundPusher {
         fn new(model: &Model) -> Self {
-            Pusher {
-                other: Handle::new(&model.get_or_create::<A>()),
+            LowerBoundPusher {
+                model: model.handle(),
+                watcher: model.get_or_create::<GenericLiteralWatcher>(),
+                calls: Cell::new(0),
             }
         }
 
-        fn after_create(this: &Rc<RefCell<Self>>, model: &Model) {
-            let propagator: Rc<RefCell<dyn Propagator>> = this.clone();
-            model
-                .get_or_create::<Trail>()
-                .borrow_mut()
-                .propagators
-                .push(propagator);
+        fn after_create(this: &Handle<Self>, _model: &Model) {
+            this.watcher
+                .register(handle_as_dyn!(this, dyn PropagatorInterface));
+        }
+    }
+
+    impl PropagatorInterface for LowerBoundPusher {
+        fn propagate(&self) -> bool {
+            self.calls.set(self.calls.get() + 1);
+            let integer_trail = self.model.get_or_create::<IntegerTrail>();
+            let lower_bound = integer_trail.lower_bound.get();
+            if lower_bound < TARGET {
+                integer_trail.enqueue(0, lower_bound + 1);
+                self.watcher.call_again_during_this_propagation();
+            }
+            true
         }
     }
 
     #[test]
-    fn a_trail_calls_trait_object_propagators_with_mutable_access_to_itself() {
+    fn a_propagation_runs_the_re_entrant_call_chains_of_the_sat_core() {
         // Arrange
         let model = Model::default();
-        model.get_or_create::<Pusher>();
+        let pusher = model.get_or_create::<LowerBoundPusher>();
+        let sat_solver = model.get_or_create::<SatSolver>();
+        model.get_or_create::<Trail>().enqueue(DECISION);
+
+        // Act
+        let result = sat_solver.propagate();
+
+        // Assert
+        assert!(!result);
+        assert!(sat_solver.model_is_unsat.get());
+        assert_eq!(
+            *model.get_or_create::<Trail>().literals.borrow(),
+            vec![1, -103, 101, 102, 103]
+        );
+        assert_eq!(model.get_or_create::<IntegerTrail>().lower_bound.get(), 3);
+        assert_eq!(pusher.calls.get(), 3);
+        assert_eq!(
+            model
+                .get_or_create::<GenericLiteralWatcher>()
+                .writes_seen_while_running
+                .get(),
+            2
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_borrow_held_across_a_call_back_to_its_field_panics_in_a_debug_build() {
+        // Arrange
+        let model = Model::default();
+        let integer_trail = model.get_or_create::<IntegerTrail>();
+        let trail = model.get_or_create::<Trail>();
+        let _held = trail.literals.borrow();
+
+        // Act and Assert
+        expect_death(
+            || integer_trail.enqueue(0, 1),
+            "DebugRefCell already borrowed",
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_handle_used_after_its_model_is_dropped_panics_in_a_debug_build() {
+        // Arrange
+        let model = Model::default();
         let trail = model.get_or_create::<Trail>();
 
         // Act
-        trail.borrow_mut().propagate();
+        drop(model);
 
         // Assert
-        assert_eq!(trail.borrow().assigned, vec![1]);
-        assert_eq!(model.get_or_create::<A>().borrow().name, "!");
+        expect_death(
+            || {
+                trail.index();
+            },
+            "a handle was used after its component was dropped",
+        );
+    }
+
+    #[derive(Default)]
+    struct DropLog(Mutex<Vec<&'static str>>);
+
+    impl DropLog {
+        fn record(&self, name: &'static str) {
+            self.0.lock().unwrap().push(name);
+        }
+    }
+
+    trait Named {
+        fn name(&self) -> &'static str;
+    }
+
+    struct Solver {
+        log: Handle<DropLog>,
+        propagators: DebugRefCell<Vec<Handle<dyn Named>>>,
+    }
+
+    impl Component for Solver {
+        fn new(model: &Model) -> Self {
+            Solver {
+                log: model.get_singleton::<DropLog>().unwrap(),
+                propagators: DebugRefCell::default(),
+            }
+        }
+    }
+
+    impl Drop for Solver {
+        fn drop(&mut self) {
+            self.log.record("solver");
+        }
+    }
+
+    struct Propagator {
+        log: Handle<DropLog>,
+    }
+
+    impl Component for Propagator {
+        fn new(model: &Model) -> Self {
+            Propagator {
+                log: model.get_singleton::<DropLog>().unwrap(),
+            }
+        }
+
+        fn after_create(this: &Handle<Self>, model: &Model) {
+            model
+                .get_or_create::<Solver>()
+                .propagators
+                .borrow_mut()
+                .push(handle_as_dyn!(this, dyn Named));
+        }
+    }
+
+    impl Named for Propagator {
+        fn name(&self) -> &'static str {
+            "propagator"
+        }
+    }
+
+    impl Drop for Propagator {
+        fn drop(&mut self) {
+            self.log.record(self.name());
+        }
+    }
+
+    struct Later {
+        log: Handle<DropLog>,
+    }
+
+    impl Component for Later {
+        fn new(model: &Model) -> Self {
+            Later {
+                log: model.get_singleton::<DropLog>().unwrap(),
+            }
+        }
+    }
+
+    impl Drop for Later {
+        fn drop(&mut self) {
+            self.log.record("later");
+        }
     }
 
     #[test]
-    fn a_component_made_inside_the_constructor_of_another_exists_once() {
+    fn the_model_drops_components_in_reverse_order_of_creation() {
+        // Arrange
+        let log = Arc::new(DropLog::default());
+        let model = Model::default();
+        model.register(log.clone());
+        model.get_or_create::<Solver>();
+        model.get_or_create::<Propagator>();
+        model.get_or_create::<Later>();
+
+        // Act
+        drop(model);
+
+        // Assert
+        assert_eq!(
+            *log.0.lock().unwrap(),
+            vec!["later", "propagator", "solver"]
+        );
+        assert_eq!(Arc::strong_count(&log), 1);
+    }
+
+    struct P {
+        log: Handle<DropLog>,
+        q: DebugRefCell<Option<Handle<Q>>>,
+    }
+
+    struct Q {
+        log: Handle<DropLog>,
+        p: Handle<P>,
+    }
+
+    impl Component for P {
+        fn new(model: &Model) -> Self {
+            P {
+                log: model.get_singleton::<DropLog>().unwrap(),
+                q: DebugRefCell::default(),
+            }
+        }
+    }
+
+    impl Component for Q {
+        fn new(model: &Model) -> Self {
+            Q {
+                log: model.get_singleton::<DropLog>().unwrap(),
+                p: model.get_or_create::<P>(),
+            }
+        }
+
+        fn after_create(this: &Handle<Self>, _model: &Model) {
+            *this.p.q.borrow_mut() = Some(this.clone());
+        }
+    }
+
+    impl Drop for P {
+        fn drop(&mut self) {
+            self.log.record("p");
+        }
+    }
+
+    impl Drop for Q {
+        fn drop(&mut self) {
+            self.log.record("q");
+        }
+    }
+
+    #[test]
+    fn two_components_that_point_to_each_other_are_both_dropped() {
+        // Arrange
+        let log = Arc::new(DropLog::default());
+        let model = Model::default();
+        model.register(log.clone());
+        let q = model.get_or_create::<Q>();
+        let p = model.get_or_create::<P>();
+        let q_of_p = p.q.borrow().clone().unwrap();
+        assert_eq!(q_of_p.p.as_non_null(), p.as_non_null());
+        assert_eq!(q.p.as_non_null(), p.as_non_null());
+
+        // Act
+        drop(model);
+
+        // Assert
+        assert_eq!(*log.0.lock().unwrap(), vec!["q", "p"]);
+    }
+
+    struct Registry {
+        members: DebugRefCell<Vec<Handle<Member>>>,
+    }
+
+    impl Component for Registry {
+        fn new(_model: &Model) -> Self {
+            Registry {
+                members: DebugRefCell::default(),
+            }
+        }
+    }
+
+    struct Member;
+
+    impl Component for Member {
+        fn new(_model: &Model) -> Self {
+            Member
+        }
+
+        fn after_create(this: &Handle<Self>, model: &Model) {
+            model
+                .get_or_create::<Registry>()
+                .members
+                .borrow_mut()
+                .push(this.clone());
+        }
+    }
+
+    #[test]
+    fn create_runs_the_same_construction_steps_as_get_or_create() {
         // Arrange
         let model = Model::default();
 
         // Act
-        let first = model.get_or_create::<B>();
-        let a = model.get_or_create::<A>();
+        let first = model.create::<Member>();
+        let second = model.create::<Member>();
 
         // Assert
-        assert!(Rc::ptr_eq(&first.borrow().a.get(), &a));
-        assert!(Rc::ptr_eq(&model.get_or_create::<B>(), &first));
+        let registry = model.get_or_create::<Registry>();
+        let members = registry.members.borrow();
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[0].as_non_null(), first.as_non_null());
+        assert_eq!(members[1].as_non_null(), second.as_non_null());
+        assert!(model.get_singleton::<Member>().is_none());
+    }
+
+    struct SharedCounter(AtomicI64);
+
+    #[test]
+    fn a_shared_object_is_registered_in_the_model_of_each_worker_thread() {
+        // Arrange
+        let shared = Arc::new(SharedCounter(AtomicI64::new(0)));
+
+        // Act
+        let workers: Vec<_> = (0..2)
+            .map(|_| {
+                let shared = shared.clone();
+                std::thread::spawn(move || {
+                    let model = Model::default();
+                    model.register(shared);
+                    let counter = model.get_singleton::<SharedCounter>().unwrap();
+                    counter.0.fetch_add(1, Ordering::SeqCst);
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+
+        // Assert
+        assert_eq!(shared.0.load(Ordering::SeqCst), 2);
+        assert_eq!(Arc::strong_count(&shared), 1);
     }
 }

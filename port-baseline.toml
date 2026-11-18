@@ -203,31 +203,41 @@ upstream_cases = 74
 debug_only = 1
 release_only = 1
 
-# sat/model_test.cc: the two death cases are one expect_death call each. The four tests of the
-# form of the container and the one on creation inside a constructor are added.
+# sat/model_test.cc: the two death cases are one expect_death call each. The added tests
+# prove the form of the container on a small copy of the SAT core. Two of them check what
+# a debug build catches and exist in debug builds only.
 [[file]]
 upstream = "sat/model_test.cc"
 rust = "crates/sat/src/model.rs"
 binary = "cpsat_sat"
 module = "model::tests"
 upstream_cases = 5
+debug_only = 2
 
 [[file.added]]
-name = "a_component_reads_another_through_its_handle"
-reason = "upstream has no such case; proves the form of the container for a component that reads another"
+name = "a_propagation_runs_the_re_entrant_call_chains_of_the_sat_core"
+reason = "upstream has no such case; proves the form on the calls of the SAT core that come back to a running component: a trail reached as an argument and as a member, a call back into the solver, a write to a field of the running watcher, and a request to be called again"
 
 [[file.added]]
-name = "a_component_mutates_another_through_its_handle"
-reason = "proves the form of the container for a component that writes another"
+name = "a_borrow_held_across_a_call_back_to_its_field_panics_in_a_debug_build"
+reason = "checks that a debug build catches two overlapping borrows of one field; debug only, since the overlap is undefined behaviour in a release build"
 
 [[file.added]]
-name = "two_components_hold_handles_to_each_other"
-reason = "proves that two components can point to each other without a cycle that leaks"
+name = "a_handle_used_after_its_model_is_dropped_panics_in_a_debug_build"
+reason = "checks that a debug build catches a handle used after its component is dropped; debug only, since the use is undefined behaviour in a release build"
 
 [[file.added]]
-name = "a_trail_calls_trait_object_propagators_with_mutable_access_to_itself"
-reason = "proves the shape the SAT core uses: a trail that calls propagators through trait objects"
+name = "the_model_drops_components_in_reverse_order_of_creation"
+reason = "checks the order of ~Model (sat/model.h:64), with a component that sits in the propagator list of another"
 
 [[file.added]]
-name = "a_component_made_inside_the_constructor_of_another_exists_once"
-reason = "checks that a component created from the constructor of another is the singleton of the model"
+name = "two_components_that_point_to_each_other_are_both_dropped"
+reason = "checks that two components with handles to each other leak nothing"
+
+[[file.added]]
+name = "create_runs_the_same_construction_steps_as_get_or_create"
+reason = "checks that create runs the step after creation, as the constructor body runs for Create upstream (sat/model.h:183)"
+
+[[file.added]]
+name = "a_shared_object_is_registered_in_the_model_of_each_worker_thread"
+reason = "checks the way a model on each worker thread registers an object the workers share, as upstream registers SharedResponseManager (sat/cp_model_solver_helpers.cc:2254)"

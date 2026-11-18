@@ -59,38 +59,164 @@ define_strong_index_type!(BooleanVariable);
 
 ## 5. Shared solver state
 
-Upstream, every component is fetched from one `Model` by its type and keeps raw pointers to other components for its whole life, and several components may call each other while one of them is running. The Rust form is `crates/sat/src/model.rs`:
+Upstream, every component is fetched from one `Model` by its type and keeps raw pointers to other components for its whole life. Components call each other while one of them is running: `SatSolver::Propagate` calls `IntegerTrail::Propagate`, which calls back `SatSolver::NotifyThatModelIsUnsat`. The Rust form is `crates/sat/src/model.rs`. It is proven on a small copy of the SAT core, the tests of that file, and is to be confirmed by the first real file of phase 1.
 
-- A component type implements `Component`. `Component::new(model: &Model)` is the constructor `T(Model* model)`, or `T()` when the model is not used. `Model` methods take `&self`, so a constructor can call `model.get_or_create` for the components it needs.
-- `get_or_create`, `create`, `take_ownership` and `register` give an `Rc<RefCell<T>>`. The model owns it and drops its components in reverse order of creation, as upstream.
-- A field that holds another component is a `Handle<T>`, never a `&` or `&mut` and never an `Rc`. A `Handle` is a `Weak`, so two components that point to each other leave no cycle. `handle.get()` gives the `Rc`, and the caller borrows for one call: `handle.get().borrow_mut().x = 1`. The component that runs a call with `&mut` access to another passes it as an argument and does not borrow it again through a handle, since a second borrow panics.
-- A constructor that hands `this` to another component (`sat/integer.h:558`) does it in `Component::after_create`, which runs once the object is in the model.
-- A component called through a trait object is held as `Rc<RefCell<dyn Trait>>`, made by coercing the `Rc` of the concrete type. A trail that calls its propagators clones the `Rc` of one propagator, then calls it with `&mut self` as the argument.
+The form, in short:
+
+- The model owns each component in a heap box that never moves, and `get_or_create`, `create`, `take_ownership` and `get_singleton` give a `Handle<T>`. A handle derefs to `&T`. No `&mut` of a component is ever made.
+- Every method of a component takes `&self`. A field that a method changes after `new` is a `Cell` when its type is `Copy`, else a `DebugRefCell`. A field set in `new` and never changed is a plain field.
+- A `DebugRefCell` borrow lives for one statement, or for a block that makes no call that may come back to the same field. A debug build panics when two borrows overlap. A release build does not check, and an overlap is undefined behaviour.
+- A model is built pinned in a box (`Model::default()` and `Model::new(name)` give a `Pin<Box<Model>>`; this is the one exception to rule 22, since a type that must not move has no `Default` impl) and drops its components in reverse order of creation.
+
+Each case below has a C++ line and its Rust form.
+
+### 5.1 A member pointer to another component
+
+A member that points to a component is a `Handle<T>`, filled in `new` with `get_or_create`. A call through it is a method call on the handle.
 
 ```cpp
-explicit IntegerTrail(Model* model)                          // sat/integer.h:549
-    : trail_(model->GetOrCreate<Trail>()),                   // sat/integer.h:554
-      sat_solver_(model->GetOrCreate<SatSolver>()) {         // sat/integer.h:555
-  model->GetOrCreate<SatSolver>()->AddPropagator(this);      // sat/integer.h:558
-}
-Trail* trail_;                                               // a member, as in sat/integer.h:1306
+trail_(model->GetOrCreate<Trail>()),     // sat/integer.h:554
+Trail* trail_;                           // sat/integer.h:1306
+trail_->Enqueue(literal, propagator_id_);   // sat/integer.cc:1586
 ```
 
 ```rust
-impl Component for IntegerTrail {
-    fn new(model: &Model) -> Self {
-        IntegerTrail {
-            trail: Handle::new(&model.get_or_create::<Trail>()),
-            sat_solver: Handle::new(&model.get_or_create::<SatSolver>()),
-        }
-    }
-    fn after_create(this: &Rc<RefCell<Self>>, model: &Model) {
-        model.get_or_create::<SatSolver>().borrow_mut().add_propagator(this.clone());
-    }
-}
+trail: model.get_or_create::<Trail>(),
 trail: Handle<Trail>,
-// use:
-self.trail.get().borrow_mut().enqueue(literal);
+self.trail.enqueue(literal, self.propagator_id);
+```
+
+### 5.2 A component passed as an argument and also reached through a member
+
+A `T*` argument is `&T`. The argument and the member are two shared references to one object, which is allowed. Port each use as it is upstream: the argument where upstream uses the argument, the member where upstream uses the member.
+
+```cpp
+bool IntegerTrail::Propagate(Trail* trail) {         // sat/integer.cc:736
+  trail_->EnqueueWithUnitReason(lit);                // sat/integer.cc:782
+  while (propagation_trail_index_ < trail->Index()) {   // sat/integer.cc:789
+```
+
+```rust
+fn propagate(&self, trail: &Trail) -> bool {
+    self.trail.enqueue_with_unit_reason(lit);
+    while self.propagation_trail_index.get() < trail.index() {
+```
+
+### 5.3 A call back into the caller
+
+The caller is still running, so the state the callee changes is in a `Cell` or a `DebugRefCell` that the caller does not hold borrowed across the call.
+
+```cpp
+sat_solver_->NotifyThatModelIsUnsat();          // sat/integer.cc:770
+void NotifyThatModelIsUnsat() { model_is_unsat_ = true; }   // sat/sat_solver.h:508
+watcher_->CallAgainDuringThisPropagation();     // sat/linear_programming_constraint.cc:2712
+```
+
+```rust
+self.sat_solver.notify_that_model_is_unsat();
+pub fn notify_that_model_is_unsat(&self) { self.model_is_unsat.set(true); }
+self.watcher.call_again_during_this_propagation();
+```
+
+### 5.4 A pointer to a field of another component
+
+The field is a `DebugRefCell` and the pointer is `Handle::field`, made in `after_create` (5.8) since it needs the address of the component. The other component keeps a `Handle` of the field and borrows it for one statement.
+
+```cpp
+integer_trail_->RegisterWatcher(&modified_vars_);   // sat/integer.cc:2512
+std::vector<SparseBitset<IntegerVariable>*> watchers_;   // sat/integer.h:1294
+bitset->Set(var);                                   // sat/integer.cc:1799
+```
+
+```rust
+integer_trail.register_watcher(this.field(|watcher| &watcher.modified_vars));
+watchers: DebugRefCell<Vec<Handle<DebugRefCell<SparseBitset<IntegerVariable>>>>>,
+bitset.borrow_mut().set(var);
+```
+
+### 5.5 `Model* model_` as a member
+
+The member is a `Handle<Model>`, made with `model.handle()`.
+
+```cpp
+Model* model_;   // sat/sat_solver.h:837
+```
+
+```rust
+model: Handle<Model>,
+// in new:
+model: model.handle(),
+```
+
+### 5.6 A `const SatParameters&` member
+
+A reference member to a component is a `Handle` too, read through its getters (rule 9).
+
+```cpp
+parameters_(*model->GetOrCreate<SatParameters>())   // sat/integer.h:557
+const SatParameters& parameters_;                     // sat/integer.h:1309
+```
+
+```rust
+parameters: model.get_or_create::<SatParameters>(),
+parameters: Handle<SatParameters>,
+```
+
+### 5.7 A reference into another component held across a loop
+
+The method that hands out the reference returns the `DebugRef` guard, and the caller holds it for the loop. The loop must make no call that writes the same field, as upstream, where such a call would move the data.
+
+```cpp
+const IntegerValue* lower_bounds = integer_trail_->LowerBoundsData();   // sat/linear_propagation.cc:607
+const IntegerValue* LowerBoundsData() const { return var_lbs_.data(); }  // sat/integer.h:658
+```
+
+```rust
+let lower_bounds = self.integer_trail.lower_bounds_data();
+pub fn lower_bounds_data(&self) -> DebugRef<'_, Vec<IntegerValue>> { self.var_lbs.borrow() }
+```
+
+### 5.8 Construction order and the step after creation
+
+`Component::new(model: &Model)` is the constructor `T(Model* model)`, or `T()` when it ignores the model. It may call `model.get_or_create` for the components it needs, so those are created first. A constructor body that hands `this` to another component does that in `Component::after_create`, which runs once the object has its address and before the model records it, so the order of the cleanup list is the upstream order. `create` runs the same steps as `get_or_create`. The model drops components in reverse order of creation, so a `Drop` impl may use the handles a component got in `new`, never one it got later.
+
+```cpp
+model->GetOrCreate<SatSolver>()->AddPropagator(this);   // sat/integer.h:558
+```
+
+```rust
+fn after_create(this: &Handle<Self>, model: &Model) {
+    model.get_or_create::<SatSolver>().add_propagator(handle_as_dyn!(this, dyn SatPropagator));
+}
+```
+
+### 5.9 Propagator lists of trait objects
+
+A list of pointers to an interface is a `DebugRefCell<Vec<Handle<dyn Trait>>>`. `handle_as_dyn!` turns a `Handle<T>` into a `Handle<dyn Trait>`. The loop that calls them clones one handle per statement and does not hold the list borrowed during the call, since the callee may come back to the list owner.
+
+```cpp
+std::vector<SatPropagator*> propagators_;          // sat/sat_solver.h:850
+virtual bool Propagate(Trail* trail) = 0;          // sat/sat_trail.h:513
+if (!propagator->Propagate(trail_)) return false;  // sat/sat_solver.cc:2299
+```
+
+```rust
+propagators: DebugRefCell<Vec<Handle<dyn SatPropagator>>>,
+fn propagate(&self, trail: &Trail) -> bool;
+let propagator = self.propagators.borrow()[i].clone();
+if !propagator.propagate(&self.trail) { return false; }
+```
+
+### 5.10 Worker threads
+
+A model is not `Send`. Upstream builds the model of a full worker in its constructor (`sat/cp_model_solver.cc:1113`), which the main thread calls (`sat/cp_model_solver.cc:2154`), and runs it in the task of `GenerateTask` (`sat/cp_model_solver.cc:1193`) on a thread of a pool. In Rust, a worker builds its own model on the thread that runs it and keeps it there. An object that workers share is an `Arc<T>` with `T: Send + Sync`, and each worker registers a clone in its own model.
+
+```cpp
+local_model->Register<SharedResponseManager>(response);   // sat/cp_model_solver_helpers.cc:2254
+```
+
+```rust
+local_model.register(response.clone());   // response: Arc<SharedResponseManager>
 ```
 
 ## 6. Hash containers
