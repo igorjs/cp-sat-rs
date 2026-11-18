@@ -438,8 +438,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | util | `util/sigint.cc` | 77 | none | - | `base/macros/os_support.h`, `util/sigint.h` | 3 | - | todo |
 | util | `util/sigint.h` | 63 | none | - | `base/macros/os_support.h` | 2 | - | todo |
 | util | `util/sort.h` | 141 | `util/sort_test.cc` | 5 | - | 0 | - | todo |
-| util | `util/sorted_interval_list.cc` | 1075 | `util/sorted_interval_list_test.cc` | 74 | `base/types.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 2 | 0 | todo |
-| util | `util/sorted_interval_list.h` | 757 | `util/sorted_interval_list_test.cc` | 74 | - | 0 | 0 | todo |
+| util | `util/sorted_interval_list.cc` | 1075 | `util/sorted_interval_list_test.cc` | 74 | `base/types.h`, `util/saturated_arithmetic.h`, `util/sorted_interval_list.h` | 2 | 0 | done |
+| util | `util/sorted_interval_list.h` | 757 | `util/sorted_interval_list_test.cc` | 74 | - | 0 | 0 | done |
 | util | `util/stats.cc` | 267 | `util/stats_test.cc` | 16 | `base/timer.h`, `port/sysinfo.h`, `util/stats.h` | 2 | - | todo |
 | util | `util/stats.h` | 426 | `util/stats_test.cc` | 16 | `base/timer.h` | 1 | - | todo |
 | util | `util/strong_integers.h` | 493 | none | - | - | 0 | 0 | done |

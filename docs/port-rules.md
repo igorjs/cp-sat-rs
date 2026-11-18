@@ -35,7 +35,7 @@ Every ported file starts with the upstream Apache 2.0 header, unchanged, then on
 
 ## 3. Integer types
 
-`int64_t` is `i64`, `int32_t` and `int` are `i32`, `uint64_t` is `u64`, `size_t` is `usize`. An operation that saturates or wraps upstream names that in Rust: `saturating_add`, `wrapping_mul`, or a `cap_*` function of `saturated_arithmetic`. A plain `+` means the result cannot overflow. Overflow checks are on in every profile, so a plain `+` that overflows panics in a release build too.
+`int64_t` is `i64`, `int32_t` and `int` are `i32`, `uint64_t` is `u64`, `size_t` is `usize`. An operation that saturates or wraps upstream names that in Rust: `saturating_add`, `wrapping_mul`, or a `cap_*` function of `saturated_arithmetic`. A plain `+` means the result cannot overflow. Overflow checks are on in every profile, so a plain `+` that overflows panics in a release build too. Where upstream signed arithmetic overflows for a reachable input, the port takes the value an optimised build gives, with a `wrapping_*` call and a comment.
 
 ```cpp
 const int64_t result = TwosComplementAddition(x, y);   // util/saturated_arithmetic.h:163
@@ -335,4 +335,45 @@ inline int LeastSignificantBitPosition(T n);   // util/bitset.h:90
 
 ```rust
 pub fn least_significant_bit_position<T: BitScanWord>(algo: BitScanAlgorithm, n: T) -> i32
+```
+
+## 22. Constructors
+
+A C++ default constructor is `Default`. The constructor with the most parameters is `new`. Every other constructor of the overload set takes a suffix that names its parameter, as rule 19 says: `new_value` for a single value, `new_from_intervals` for a vector, `_i32` for the same form over `int`.
+
+```cpp
+explicit Domain(int64_t value);       // util/sorted_interval_list.h:142
+Domain(int64_t left, int64_t right);  // util/sorted_interval_list.h:148
+```
+
+```rust
+pub fn new_value(value: i64) -> Self
+pub fn new(left: i64, right: i64) -> Self
+```
+
+## 23. Nested types, optional arguments and iterators
+
+A type nested in another keeps both names joined: `ClosedInterval::Iterator` is `ClosedIntervalIterator`. A default argument is an `Option` that the caller writes: `exact = nullptr` is `exact: Option<&mut bool>` and `None`. `operator<` is `PartialOrd` when `operator==` compares the same fields. When they differ, as `ClosedInterval::operator<` (start only) and `operator==` (start and end) do, there is no `PartialOrd`, which would break the trait contract: the `operator<` is a named method, `less_than`, and the order is compared in place. The `Ord` trait is left out when its `min` and `max` would hide a method of the same name. A C++ `begin()` and `end()` pair for a range `for` is `IntoIterator`, and `operator<<` is `Display`, so `ToString()` is `to_string()`.
+
+```cpp
+ABSL_MUST_USE_RESULT Domain MultiplicationBy(int64_t coeff, bool* exact = nullptr) const;  // util/sorted_interval_list.h:408
+```
+
+```rust
+pub fn multiplication_by(&self, coeff: i64, exact: Option<&mut bool>) -> Domain
+```
+
+## 24. `std::set` positions and `LOG(DFATAL)`
+
+A `std::set` that hands out iterators is a sorted `Vec` and an iterator is the `usize` position, since stable Rust has no cursor on a `BTreeSet`. `LOG(DFATAL)` is `panic!` in a debug build and `log::error!` in an optimised build. `DLOG_IF(DFATAL, c)` is `debug_assert!`, which is silent in an optimised build as `DLOG_IF` is.
+
+```cpp
+auto result = intervals_.insert({start, end});   // util/sorted_interval_list.cc:975
+LOG(DFATAL) << "Invalid interval: " << ...;      // util/sorted_interval_list.cc:971
+```
+
+```rust
+let position = self.intervals.partition_point(|i| (i.start, i.end) < (start, end));
+if cfg!(debug_assertions) { panic!("Invalid interval: {invalid}"); }
+log::error!("Invalid interval: {invalid}");
 ```

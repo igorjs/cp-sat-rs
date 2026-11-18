@@ -9,6 +9,9 @@ publish = false
 [lib]
 name = "cpsat_util"
 
+[dependencies]
+log.workspace = true
+
 [dev-dependencies]
 rand_chacha.workspace = true
 cpsat-testutil = { path = "../testutil" }
