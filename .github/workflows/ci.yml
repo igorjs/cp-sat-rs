@@ -116,7 +116,8 @@ jobs:
   # system libraries.
   reference:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Twice the measured build time of 17 minutes.
+    timeout-minutes: 35
     env:
       REFERENCE_PREFIX: ${{ github.workspace }}/.reference
     steps:
@@ -139,7 +140,7 @@ jobs:
         run: cargo xtask port-map
       - if: hashFiles('xtask/Cargo.toml') != ''
         run: git diff --exit-code docs/port-map.md
-      # Saves a finished build even when the job is cancelled afterwards.
+      # Saves a finished build even when a step after the build fails.
       - if: always() && steps.reference-cache.outputs.cache-hit != 'true' && hashFiles('.reference/.reference-commit') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
