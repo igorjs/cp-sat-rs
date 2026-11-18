@@ -25,7 +25,7 @@ use cpsat_base::hash::fasthash64;
 use cpsat_proto::constraint_proto::Constraint;
 use cpsat_proto::{
     ConstraintProto, CpModelProto, CpObjectiveProto, FloatObjectiveProto, IntegerVariableProto,
-    LinearConstraintProto, LinearExpressionProto,
+    LinearArgumentProto, LinearConstraintProto, LinearExpressionProto,
 };
 use cpsat_util::bitset::Bitset64;
 use cpsat_util::full_precision_inequalities::TightSum;
@@ -40,8 +40,16 @@ use crate::sat_literal::{BooleanVariable, Literal};
 pub static CP_MODEL_DUMP_MODELS: AtomicBool = AtomicBool::new(false);
 
 // Prefix filename for all dumped files.
-pub static CP_MODEL_DUMP_PREFIX: LazyLock<Mutex<String>> =
-    LazyLock::new(|| Mutex::new(if cfg!(windows) { ".\\" } else { "/tmp/" }.to_owned()));
+pub static CP_MODEL_DUMP_PREFIX: LazyLock<Mutex<String>> = LazyLock::new(|| {
+    Mutex::new(
+        if cfg!(target_env = "msvc") {
+            ".\\"
+        } else {
+            "/tmp/"
+        }
+        .to_owned(),
+    )
+});
 
 // DEBUG ONLY. When set to true, solve will dump all lns or objective_shaving
 // submodel protos in text format to 'FLAGS_cp_model_dump_prefix'xxx.pb.txt.
@@ -175,7 +183,8 @@ impl fmt::Display for AffineExpr {
         if self.var < 0 || self.coeff == 0 {
             return write!(f, "{}", self.offset);
         }
-        // Negation wraps for the smallest offset, as the optimised C++ build does.
+        // `-offset` at sat/cp_model_utils.cc:1558 gives the smallest int64 back for the smallest
+        // int64: the reference build prints "X0 - -9223372036854775808" for it.
         let offset_str = if self.offset > 0 {
             format!(" + {}", self.offset)
         } else if self.offset < 0 {
@@ -243,6 +252,8 @@ pub fn get_affine_expr_max(expr: &AffineExpr, model_proto: &CpModelProto) -> i64
 // Returns the gcd of the given LinearExpressionProto.
 // Specifying the second argument will take the gcd with it.
 pub fn linear_expression_gcd(expr: &LinearExpressionProto, gcd: i64) -> i64 {
+    // `std::abs` at sat/cp_model_utils.cc:77 gives the smallest int64 back for the smallest
+    // int64, as the reference build shows: its gcd with 0 is the smallest int64.
     let mut gcd = std_gcd(gcd, expr.offset.wrapping_abs());
     for &coeff in &expr.coeffs {
         gcd = std_gcd(gcd, coeff.wrapping_abs());
@@ -1092,7 +1103,8 @@ pub fn compute_float_objective_value(proto: &FloatObjectiveProto, solution: &[i6
 // Returns true if a linear expression can be reduced to a single ref.
 // That is -var or +var.
 pub fn expression_contains_single_ref(expr: &LinearExpressionProto) -> bool {
-    // `wrapping_abs` keeps the value the optimised C++ `std::abs` gives for the smallest int64.
+    // `std::abs` at sat/cp_model_utils.cc:868 gives the smallest int64 back for the smallest
+    // int64, so the reference build says such a coefficient is not a single ref.
     expr.offset == 0 && expr.vars.len() == 1 && expr.coeffs[0].wrapping_abs() == 1
 }
 
@@ -1490,8 +1502,13 @@ pub fn canonicalize_lin_max(ct: &mut ConstraintProto) {
         return;
     }
     let enforcements: HashSet<i32> = ct.enforcement_literal.iter().copied().collect();
+    // `mutable_lin_max()` switches the oneof to an empty lin_max, which is what a build without
+    // the DCHECK above goes on with for another kind of constraint.
+    if !matches!(ct.constraint, Some(Constraint::LinMax(_))) {
+        ct.constraint = Some(Constraint::LinMax(LinearArgumentProto::default()));
+    }
     let Some(Constraint::LinMax(lin_max)) = &mut ct.constraint else {
-        panic!("the constraint is not a lin_max");
+        unreachable!("the constraint was just made a lin_max");
     };
     canonicalize_linear_expression(&enforcements, lin_max.target.get_or_insert_default());
     for expr in &mut lin_max.exprs {
@@ -1999,6 +2016,36 @@ pub const K_LARGEST_CONSTRAINT_TYPE: ConstraintCase = ConstraintCase::DummyConst
 // kLargestConstraintType should be less than 2^kConstraintTypeBitSize.
 pub const K_CONSTRAINT_TYPE_BIT_SIZE: i32 = 5;
 const _: () = assert!((K_LARGEST_CONSTRAINT_TYPE as i32) < (1 << K_CONSTRAINT_TYPE_BIT_SIZE));
+
+// The generated `constraint_case()` of C++: the kind of the constraint that is set.
+pub fn constraint_case(ct: &ConstraintProto) -> ConstraintCase {
+    match &ct.constraint {
+        None => ConstraintCase::ConstraintNotSet,
+        Some(Constraint::BoolOr(_)) => ConstraintCase::BoolOr,
+        Some(Constraint::BoolAnd(_)) => ConstraintCase::BoolAnd,
+        Some(Constraint::AtMostOne(_)) => ConstraintCase::AtMostOne,
+        Some(Constraint::ExactlyOne(_)) => ConstraintCase::ExactlyOne,
+        Some(Constraint::BoolXor(_)) => ConstraintCase::BoolXor,
+        Some(Constraint::IntDiv(_)) => ConstraintCase::IntDiv,
+        Some(Constraint::IntMod(_)) => ConstraintCase::IntMod,
+        Some(Constraint::LinMax(_)) => ConstraintCase::LinMax,
+        Some(Constraint::IntProd(_)) => ConstraintCase::IntProd,
+        Some(Constraint::Linear(_)) => ConstraintCase::Linear,
+        Some(Constraint::AllDiff(_)) => ConstraintCase::AllDiff,
+        Some(Constraint::DummyConstraint(_)) => ConstraintCase::DummyConstraint,
+        Some(Constraint::Element(_)) => ConstraintCase::Element,
+        Some(Constraint::Circuit(_)) => ConstraintCase::Circuit,
+        Some(Constraint::Routes(_)) => ConstraintCase::Routes,
+        Some(Constraint::Inverse(_)) => ConstraintCase::Inverse,
+        Some(Constraint::Reservoir(_)) => ConstraintCase::Reservoir,
+        Some(Constraint::Table(_)) => ConstraintCase::Table,
+        Some(Constraint::Automaton(_)) => ConstraintCase::Automaton,
+        Some(Constraint::Interval(_)) => ConstraintCase::Interval,
+        Some(Constraint::NoOverlap(_)) => ConstraintCase::NoOverlap,
+        Some(Constraint::NoOverlap2d(_)) => ConstraintCase::NoOverlap2D,
+        Some(Constraint::Cumulative(_)) => ConstraintCase::Cumulative,
+    }
+}
 
 pub const fn constraint_case_name(constraint_case: ConstraintCase) -> &'static str {
     match constraint_case {
@@ -3557,5 +3604,296 @@ mod tests {
             },
             "is_sorted",
         );
+    }
+
+    // The expected values of the tests below were read from the reference build at the pinned
+    // commit, by calling the upstream functions.
+    #[test]
+    fn affine_expr_to_string_of_the_smallest_offset_matches_the_reference() {
+        // Arrange
+        let expr = AffineExpr {
+            var: 0,
+            coeff: 1,
+            offset: i64::MIN,
+        };
+
+        // Act
+        let text = expr.to_string();
+
+        // Assert
+        assert_eq!(text, "X0 - -9223372036854775808");
+    }
+
+    #[test]
+    fn linear_expression_gcd_of_the_smallest_offset_and_0_matches_the_reference() {
+        // Arrange
+        let expr: LinearExpressionProto = parse_test_proto("offset: -9223372036854775808");
+
+        // Act
+        let gcd = linear_expression_gcd(&expr, 0);
+
+        // Assert
+        assert_eq!(gcd, i64::MIN);
+    }
+
+    #[test]
+    fn linear_expression_gcd_of_the_smallest_coefficient_and_0_matches_the_reference() {
+        // Arrange
+        let expr: LinearExpressionProto =
+            parse_test_proto("vars: [ 0 ] coeffs: [ -9223372036854775808 ]");
+
+        // Act
+        let gcd = linear_expression_gcd(&expr, 0);
+
+        // Assert
+        assert_eq!(gcd, i64::MIN);
+    }
+
+    #[test]
+    fn linear_expression_gcd_of_the_smallest_offset_and_6_matches_the_reference() {
+        // Arrange
+        let expr: LinearExpressionProto = parse_test_proto("offset: -9223372036854775808");
+
+        // Act
+        let gcd = linear_expression_gcd(&expr, 6);
+
+        // Assert
+        assert_eq!(gcd, 2);
+    }
+
+    #[test]
+    fn linear_expression_gcd_of_the_smallest_coefficient_and_6_matches_the_reference() {
+        // Arrange
+        let expr: LinearExpressionProto =
+            parse_test_proto("vars: [ 0 ] coeffs: [ -9223372036854775808 ]");
+
+        // Act
+        let gcd = linear_expression_gcd(&expr, 6);
+
+        // Assert
+        assert_eq!(gcd, 2);
+    }
+
+    #[test]
+    fn expression_contains_single_ref_of_the_smallest_coefficient_matches_the_reference() {
+        // Arrange
+        let expr: LinearExpressionProto =
+            parse_test_proto("vars: [ 0 ] coeffs: [ -9223372036854775808 ]");
+
+        // Act
+        let single = expression_contains_single_ref(&expr);
+
+        // Assert
+        assert!(!single);
+    }
+
+    // The golden values of the fingerprint tests below come from the reference build at the
+    // pinned commit.
+    const OTHER_FINGERPRINT_SEED: u64 = 12345;
+
+    #[test]
+    fn fingerprint_model_of_a_model_with_a_linear_and_a_lin_max_matches_the_reference() {
+        // Arrange
+        let model: CpModelProto = parse_test_proto(
+            r#"
+            variables { domain: [ 0, 5 ] }
+            variables { domain: [ 0, 5 ] }
+            constraints {
+              enforcement_literal: [ 0 ]
+              linear { vars: [ 0, 1 ] coeffs: [ 1, 2 ] domain: [ 0, 4 ] }
+            }
+            constraints { lin_max { target { vars: [ 1 ] coeffs: [ 1 ] } } }
+            constraints { interval { start { offset: 1 } } }
+            objective { vars: [ 0 ] coeffs: [ 1 ] }
+            solution_hint { vars: [ 0 ] values: [ 2 ] }
+            "#,
+        );
+
+        // Act
+        let with_default_seed = fingerprint_model(&model, K_DEFAULT_FINGERPRINT_SEED);
+        let with_other_seed = fingerprint_model(&model, OTHER_FINGERPRINT_SEED);
+
+        // Assert
+        assert_eq!(with_default_seed, 0xd19c385708aecc14);
+        assert_eq!(with_other_seed, 0xd60d0da42ac3de2b);
+    }
+
+    #[test]
+    fn fingerprint_model_of_a_model_with_boolean_constraints_matches_the_reference() {
+        // Arrange
+        let model: CpModelProto = parse_test_proto(
+            r#"
+            variables { domain: [ 0, 1 ] }
+            variables { domain: [ 0, 1 ] }
+            constraints { bool_or { literals: [ 0, -2 ] } }
+            constraints { exactly_one { literals: [ 0, 1 ] } }
+            "#,
+        );
+
+        // Act
+        let with_default_seed = fingerprint_model(&model, K_DEFAULT_FINGERPRINT_SEED);
+        let with_other_seed = fingerprint_model(&model, OTHER_FINGERPRINT_SEED);
+
+        // Assert
+        assert_eq!(with_default_seed, 0x95699c5e98fe9254);
+        assert_eq!(with_other_seed, 0xe72e0ccb16f8d074);
+    }
+
+    #[test]
+    fn fingerprint_model_of_a_model_with_all_diff_and_element_matches_the_reference() {
+        // Arrange
+        let model: CpModelProto = parse_test_proto(
+            r#"
+            variables { domain: [ 0, 10 ] }
+            variables { domain: [ 0, 10 ] }
+            variables { domain: [ 0, 10 ] }
+            constraints {
+              all_diff {
+                exprs { vars: [ 0 ] coeffs: [ 1 ] }
+                exprs { vars: [ 1 ] coeffs: [ 1 ] offset: 2 }
+              }
+            }
+            constraints { element { index: 2 target: 1 vars: [ 0, 1 ] } }
+            objective { vars: [ 0, 1 ] coeffs: [ 1, -2 ] offset: 3 }
+            "#,
+        );
+
+        // Act
+        let with_default_seed = fingerprint_model(&model, K_DEFAULT_FINGERPRINT_SEED);
+        let with_other_seed = fingerprint_model(&model, OTHER_FINGERPRINT_SEED);
+
+        // Assert
+        assert_eq!(with_default_seed, 0xbf17458621e7b121);
+        assert_eq!(with_other_seed, 0xee119c8cff709409);
+    }
+
+    #[test]
+    fn fingerprint_expression_of_an_expression_with_terms_matches_the_reference() {
+        // Arrange
+        let lin: LinearExpressionProto = parse_test_proto("vars: [ 4 ] coeffs: [ 2 ] offset: -7");
+
+        // Act
+        let with_default_seed = fingerprint_expression(&lin, K_DEFAULT_FINGERPRINT_SEED);
+        let with_other_seed = fingerprint_expression(&lin, OTHER_FINGERPRINT_SEED);
+
+        // Assert
+        assert_eq!(with_default_seed, 0x1458692e0487bb9b);
+        assert_eq!(with_other_seed, 0xaa041115b6950ce7);
+    }
+
+    #[test]
+    fn fingerprint_expression_of_a_constant_matches_the_reference() {
+        // Arrange
+        let lin: LinearExpressionProto = parse_test_proto("offset: 5");
+
+        // Act
+        let with_default_seed = fingerprint_expression(&lin, K_DEFAULT_FINGERPRINT_SEED);
+        let with_other_seed = fingerprint_expression(&lin, OTHER_FINGERPRINT_SEED);
+
+        // Assert
+        assert_eq!(with_default_seed, 0xfdb2603f1232ac38);
+        assert_eq!(with_other_seed, 0xbfea9edadd2cc526);
+    }
+
+    #[test]
+    fn fingerprint_expression_of_an_empty_expression_matches_the_reference() {
+        // Arrange
+        let lin = LinearExpressionProto::default();
+
+        // Act
+        let with_default_seed = fingerprint_expression(&lin, K_DEFAULT_FINGERPRINT_SEED);
+        let with_other_seed = fingerprint_expression(&lin, OTHER_FINGERPRINT_SEED);
+
+        // Assert
+        assert_eq!(with_default_seed, 0xf4751fa5d4643aaa);
+        assert_eq!(with_other_seed, 0xd7f19665bf9462ba);
+    }
+
+    #[test]
+    fn combine_seed_matches_the_reference() {
+        // Arrange
+        let cases: [(i32, i64, i32); 9] = [
+            (0, 0, 22385994),
+            (0, 3, 313865978),
+            (0, 1 << 40, 82285505),
+            (7, 0, 384266844),
+            (7, 3, 132849012),
+            (7, 1 << 40, 445946258),
+            (-1, 0, 847182962),
+            (-1, 3, 600126342),
+            (-1, 1 << 40, 1573512566),
+        ];
+
+        // Act
+        let combined: Vec<i32> = cases
+            .iter()
+            .map(|&(base, delta, _)| combine_seed(base, delta))
+            .collect();
+
+        // Assert
+        let expected: Vec<i32> = cases.iter().map(|&(_, _, value)| value).collect();
+        assert_eq!(combined, expected);
+    }
+
+    #[test]
+    fn constraint_case_names_the_kind_of_each_constraint_and_the_unset_case() {
+        // Arrange
+        let cases = [
+            ("bool_or {}", ConstraintCase::BoolOr),
+            ("bool_and {}", ConstraintCase::BoolAnd),
+            ("at_most_one {}", ConstraintCase::AtMostOne),
+            ("exactly_one {}", ConstraintCase::ExactlyOne),
+            ("bool_xor {}", ConstraintCase::BoolXor),
+            ("int_div {}", ConstraintCase::IntDiv),
+            ("int_mod {}", ConstraintCase::IntMod),
+            ("lin_max {}", ConstraintCase::LinMax),
+            ("int_prod {}", ConstraintCase::IntProd),
+            ("linear {}", ConstraintCase::Linear),
+            ("all_diff {}", ConstraintCase::AllDiff),
+            ("dummy_constraint {}", ConstraintCase::DummyConstraint),
+            ("element {}", ConstraintCase::Element),
+            ("circuit {}", ConstraintCase::Circuit),
+            ("routes {}", ConstraintCase::Routes),
+            ("inverse {}", ConstraintCase::Inverse),
+            ("reservoir {}", ConstraintCase::Reservoir),
+            ("table {}", ConstraintCase::Table),
+            ("automaton {}", ConstraintCase::Automaton),
+            ("interval {}", ConstraintCase::Interval),
+            ("no_overlap {}", ConstraintCase::NoOverlap),
+            ("no_overlap_2d {}", ConstraintCase::NoOverlap2D),
+            ("cumulative {}", ConstraintCase::Cumulative),
+            ("", ConstraintCase::ConstraintNotSet),
+        ];
+
+        // Act
+        let found: Vec<ConstraintCase> = cases
+            .iter()
+            .map(|(text, _)| constraint_case(&parse_test_proto::<ConstraintProto>(text)))
+            .collect();
+
+        // Assert
+        let expected: Vec<ConstraintCase> = cases.iter().map(|&(_, case)| case).collect();
+        assert_eq!(found, expected);
+    }
+
+    #[test]
+    fn canonicalize_lin_max_of_another_constraint_dies_in_debug_and_switches_in_release() {
+        // Arrange
+        let make = || -> ConstraintProto {
+            parse_test_proto("enforcement_literal: [ 2, 1, 2 ] bool_or { literals: [ 0 ] }")
+        };
+
+        // Act and Assert
+        expect_debug_death(
+            || canonicalize_lin_max(&mut make()),
+            "matches!(ct.constraint, Some(Constraint::LinMax(_)))",
+        );
+        if !cfg!(debug_assertions) {
+            let mut ct = make();
+            canonicalize_lin_max(&mut ct);
+            let expected: ConstraintProto =
+                parse_test_proto("enforcement_literal: [ 1, 2 ] lin_max { target {} }");
+            assert_eq!(ct, expected);
+        }
     }
 }
