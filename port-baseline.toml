@@ -507,3 +507,21 @@ rust = "crates/sat/src/primary_variables.rs"
 binary = "cpsat_sat"
 module = "primary_variables::tests"
 upstream_cases = 3
+
+[[file]]
+upstream = "sat/cp_model_checker_test.cc"
+rust = "crates/sat/src/cp_model_checker.rs"
+binary = "cpsat_sat"
+module = "cp_model_checker::tests"
+upstream_cases = 47
+ignored = 47
+
+# sat/util is ported in part: the Diophantine equation functions that sat/cp_model_checker calls,
+# with the modular functions they use. Each upstream case that needs another item is a pending line.
+[[file]]
+upstream = "sat/util_test.cc"
+rust = "crates/sat/src/util.rs"
+binary = "cpsat_sat"
+module = "util::tests"
+upstream_cases = 66
+pending = 60

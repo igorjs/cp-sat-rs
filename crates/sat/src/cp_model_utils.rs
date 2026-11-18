@@ -262,7 +262,7 @@ pub fn linear_expression_gcd(expr: &LinearExpressionProto, gcd: i64) -> i64 {
 }
 
 // `std::gcd`: the greatest common divisor of the absolute values, 0 for (0, 0).
-fn std_gcd(m: i64, n: i64) -> i64 {
+pub(crate) fn std_gcd(m: i64, n: i64) -> i64 {
     let (mut a, mut b) = (m.unsigned_abs(), n.unsigned_abs());
     while b != 0 {
         (a, b) = (b, a % b);

@@ -11,12 +11,13 @@ name = "cpsat_sat"
 
 [dependencies]
 cpsat-base = { path = "../base" }
+cpsat-port = { path = "../port" }
 cpsat-proto = { path = "../proto" }
 cpsat-util = { path = "../util" }
+log.workspace = true
 prost.workspace = true
 rand_chacha.workspace = true
 
 [dev-dependencies]
 cpsat-testutil = { path = "../testutil" }
-log.workspace = true
 prost-reflect.workspace = true
