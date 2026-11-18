@@ -55,6 +55,10 @@ fn linear(constraint: LinearConstraintProto) -> ConstraintProto {
     }
 }
 
+// Generates a pairwise bool_or pigeonhole problem placing `num_pigeons`
+// pigeons into `num_holes` holes (defaulting to `num_pigeons - 1`, which is
+// unsatisfiable). Variable `i * num_holes + j` indicates whether pigeon `i` is
+// placed in hole `j`.
 pub fn pigeonhole_problem(num_pigeons: i32, num_holes: Option<i32>) -> CpModelProto {
     let holes = num_holes.unwrap_or(num_pigeons - 1);
     let mut result = CpModelProto {
@@ -84,6 +88,9 @@ pub fn pigeonhole_problem(num_pigeons: i32, num_holes: Option<i32>) -> CpModelPr
     result
 }
 
+// Generates a random 3-SAT problem with a number of constraints given by:
+// num_variables * proportion_of_constraints. With the upstream default
+// proportion value, 4.26, we are around the transition SAT/UNSAT.
 pub fn random_3sat_problem(
     num_variables: i32,
     proportion_of_constraints: f64,
@@ -110,6 +117,9 @@ pub fn random_3sat_problem(
     result
 }
 
+// Generates a random 0-1 "covering" optimization linear problem:
+// - Each constraint has density ~0.5 and asks for a sum >= num_variables / 10.
+// - The objective is to minimize the number of variables at 1.
 pub fn random_linear_problem(
     num_variables: i32,
     num_constraints: i32,
@@ -229,6 +239,8 @@ mod tests {
 
         // Assert
         assert_eq!(model.variables.len(), 12);
+        // One clause per pigeon, and one per pair of pigeons in each of the 3 holes.
+        assert_eq!(bool_or_literals(&model).len(), 4 + 3 * 6);
     }
 
     #[test]
@@ -246,6 +258,19 @@ mod tests {
         // Assert
         assert_eq!(sat_a, sat_b);
         assert_eq!(linear_a, linear_b);
+        let mut other = ChaCha8Rng::seed_from_u64(SEED + 1);
+        assert_ne!(random_3sat_problem(10, 4.26, &mut other), sat_a);
+        assert_ne!(random_linear_problem(10, 5, &mut other), linear_a);
+        // 4.26 * 10 clauses, truncated, each over three distinct literals.
+        let clauses = bool_or_literals(&sat_a);
+        assert_eq!(clauses.len(), 42);
+        for clause in clauses {
+            assert_eq!(clause.len(), 3);
+            assert!(clause.iter().all(|l| (-10..10).contains(l)));
+            assert!(clause[0] != clause[1] && clause[0] != clause[2] && clause[1] != clause[2]);
+        }
+        // The 5 covering constraints and the one that defines the objective.
+        assert_eq!(linear_a.constraints.len(), 6);
     }
 
     #[test]
