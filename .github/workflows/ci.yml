@@ -161,3 +161,30 @@ jobs:
         with:
           path: .reference
           key: ${{ steps.reference-cache.outputs.cache-primary-key }}
+
+  # Runs the Rust parser, printer, validation and solution check against the
+  # reference on the models of the upstream tests. It restores the prefix that
+  # the reference job saved and never builds one.
+  difftest:
+    needs: reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REFERENCE_PREFIX: ${{ github.workspace }}/.reference
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: scripts/fetch-upstream.sh
+      - id: reference-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .reference
+          key: reference-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('upstream.lock', 'scripts/build-reference.sh') }}
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "::error::The reference build is not in the cache. Run the reference job, which builds and saves it, then run this job again."
+          exit 1
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo run --release -p cpsat-difftest --features reference --bin difftest -j 4

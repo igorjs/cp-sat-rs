@@ -4,6 +4,9 @@
 //! `Err` for a C++ exception, a parse failure or an input the reference solver
 //! needs to be valid and is not, and never aborts.
 
+pub mod compare;
+pub mod extract;
+
 #[cfg(feature = "reference")]
 #[cxx::bridge(namespace = "cpsat_difftest")]
 mod ffi {
