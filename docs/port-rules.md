@@ -479,3 +479,52 @@ absl::Span<int> FilterBoxesThatAreTooLarge(absl::Span<const Rectangle> cached_re
 fn find_one_intersection_if_present_impl<R: RectangleCoordinates>(rectangles: &[R], ...) -> Option<(i32, i32)>
 pub fn filter_boxes_that_are_too_large<'a>(cached_rectangles: &[Rectangle], energies: &[IntegerValue], boxes: &'a mut [i32]) -> &'a mut [i32]
 ```
+
+## 33. Messages that print a double
+
+`absl::StrCat` prints a double with six significant digits, as `printf("%g")` does, so `10000000000000000000000000` prints as `1e+25`. The Rust `{}` prints the shortest text that reads back to the same double, which differs. A file that prints a double in a message calls a private `six_digits_to_string`.
+
+```cpp
+return absl::StrCat("... [value = ", max_valid_magnitude, "] in objective: ", ...);   // sat/cp_model_checker.cc:991
+```
+
+```rust
+format!("... [value = {}] in objective: {}", six_digits_to_string(max_valid_magnitude), ...)
+```
+
+## 34. Macros that return early
+
+A C++ macro that returns from the calling function is a `macro_rules!` macro. Rust reads macros in file order, so the definition comes before the first use.
+
+```cpp
+#define RETURN_IF_NOT_EMPTY(statement)  // sat/cp_model_checker.cc:60
+  do { const std::string error_message = statement; if (!error_message.empty()) return error_message; } while (false)
+```
+
+```rust
+macro_rules! return_if_not_empty { ($statement:expr) => {{ let error_message: String = $statement; if !error_message.is_empty() { return error_message; } }}; }
+```
+
+## 35. Private functions that read one case of a `oneof`
+
+A private C++ function that is only called after a `switch` on the constraint kind, and that reads the payload again through the getter of its kind, takes the payload in Rust. The `switch` passes it. A function that cannot tell the kind from its caller, such as one that reads a referenced constraint, matches the `oneof` itself and falls back to the empty default message as the C++ getter does (rule 26).
+
+```cpp
+bool BoolOrConstraintIsFeasible(const ConstraintProto& ct) { for (const int lit : ct.bool_or().literals()) ...   // sat/cp_model_checker.cc:1412
+```
+
+```rust
+fn bool_or_constraint_is_feasible(&self, arg: &BoolArgumentProto) -> bool
+```
+
+## 36. Signed overflow that only an invalid input reaches
+
+Where upstream signed arithmetic overflows only for an input that the validation of the same file rejects, the port keeps the plain operator, which panics in every profile because overflow checks are on, and the comment of the public function says so. This replaces the wrapping of rule 3 for that case, since the value an optimised C++ build gives there is not defined and is not a result to rely on. A division by zero, which stops the C++ process, panics in the same way.
+
+```cpp
+sum += variable_values_[vars[i]] * coeffs[i];   // sat/cp_model_checker.cc:1458
+```
+
+```rust
+sum += self.variable_values[vars[i] as usize] * coeffs[i];
+```
