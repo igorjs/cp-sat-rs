@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/difftest", "crates/proto", "xtask"]
+members = ["crates/difftest", "crates/port", "crates/proto", "crates/testutil", "xtask"]
 exclude = ["xtask/tests/fixtures"]
 
 [workspace.package]
@@ -16,5 +16,6 @@ cxx = "=1.0.205"
 cxx-build = "=1.0.205"
 prost = "=0.14.4"
 prost-build = "=0.14.4"
+prost-reflect = { version = "=0.16.5", features = ["text-format"] }
 protox = "=0.10.0"
 sha2 = "=0.10.9"

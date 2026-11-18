@@ -108,6 +108,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpsat-port"
+version = "0.0.0"
+dependencies = [
+ "cpsat-proto",
+ "cpsat-testutil",
+ "prost",
+ "prost-reflect",
+]
+
+[[package]]
 name = "cpsat-proto"
 version = "0.0.0"
 dependencies = [
@@ -115,6 +125,15 @@ dependencies = [
  "prost-build",
  "protox",
  "sha2",
+]
+
+[[package]]
+name = "cpsat-testutil"
+version = "0.0.0"
+dependencies = [
+ "cpsat-proto",
+ "prost",
+ "prost-reflect",
 ]
 
 [[package]]

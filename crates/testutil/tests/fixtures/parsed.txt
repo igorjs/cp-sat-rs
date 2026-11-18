@@ -1,0 +1,147 @@
+commit: c931f5f778c88050a3f71d72dfc30d3d020aa821
+kind: parsed
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { name: 'x' domain: 0 domain: 10 }
+| variables { name: 'y' domain: 0 domain: 10 }
+| constraints {
+|   linear { vars: 0 coeffs: 1 vars: 1 coeffs: 1 domain: 0 domain: 10 }
+| }
+bytes: 12070a01781202000a12070a01791202000a1a0e620c0a020001120201011a02000a
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { name: 'x' domain: 0 domain: 10 }
+| variables { name: 'y' domain: 0 domain: 30 }
+| constraints {
+|   lin_max {
+|     target { vars: 1 coeffs: 1 offset: 0 }
+|     exprs { vars: 0 coeffs: 2 offset: 1 }
+|     exprs { vars: 0 coeffs: 3 offset: -5 }
+|   }
+| }
+bytes: 12070a01781202000a12070a01791202001e1a28da01250a060a010112010112080a0100120102180112110a010012010318fbffffffffffffffff01
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 0, 2 ] }
+| constraints {
+|   inverse {
+|     f_direct: 0
+|     f_direct: 1
+|     f_direct: 2
+|     f_inverse: 3
+|     f_inverse: 4
+|     f_inverse: 5
+|   }
+| }
+bytes: 1204120200021204120200021204120200021204120200021204120200021204120200021a0d92010a0a030001021203030405
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 0, 2 ] }
+| variables { domain: [ 1, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| constraints {
+|   reservoir {
+|     time_exprs: { vars: 0 coeffs: 1 }
+|     time_exprs: { vars: 1 coeffs: 1 }
+|     level_changes: { offset: -1 }
+|     level_changes: { offset: 1 }
+|     active_literals: [ 2, 3 ]
+|     min_level: 0
+|     max_level: 2
+|   }
+| }
+bytes: 1204120200021204120200021204120201011204120200011a2ac2012710021a060a01001201011a060a01011201012a020203320b18ffffffffffffffffff0132021801
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { domain: [ -2, 2 ] }
+| variables { domain: [ -2, 2 ] }
+| constraints {
+|   reservoir {
+|     time_exprs: { vars: 0 coeffs: 1 }
+|     time_exprs: { vars: 1 coeffs: 1 }
+|     level_changes: { offset: 2 }
+|     level_changes: { offset: -2 }
+|     min_level: 0
+|     max_level: 2
+|   }
+| }
+bytes: 120d120bfeffffffffffffffff0102120d120bfeffffffffffffffff01021a26c2012310021a060a01001201011a060a010112010132021802320b18feffffffffffffffff01
+case
+message: operations_research.sat.CpModelProto
+text:
+| # The literal -1 is the negation of the first variable.
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| constraints {
+|   circuit {
+|     literals: [ -1, 1, 2, 3, 0 ]
+|     tails: [ 0, 1, 2, 3, 0 ]
+|     heads: [ 0, 2, 3, 1, 2 ]
+|   }
+| }
+bytes: 1204120200011204120200011204120200011204120200011a207a1e1a050001020300220500020301022a0effffffffffffffffff0101020300
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| constraints {
+|   circuit {
+|     literals: [ 0, 1, 2, 3 ]
+|     tails: [ -10, 10, 9, 1000 ]
+|     heads: [ 10, 9, 1000, -10 ]
+|   }
+| }
+bytes: 1204120200011204120200011204120200011204120200011a287a261a0ef6ffffffffffffffff010a09e807220e0a09e807f6ffffffffffffffff012a0400010203
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| variables { domain: [ 0, 1 ] }
+| constraints { bool_xor { literals: [ 0, 1, 2, 3 ] } }
+bytes: 1204120200011204120200011204120200011204120200011a082a060a0400010203
+case
+message: operations_research.sat.CpModelProto
+text:
+| variables { name: 'a' domain: 0 domain: 1 }
+| variables { name: 'b' domain: 0 domain: 1 }
+| variables { name: 'y' domain: 0 domain: 10 }
+| constraints {
+|   enforcement_literal: [ 0, 1 ]
+|   linear { vars: 2 coeffs: 1 domain: 7 domain: 7 }
+| }
+bytes: 12070a01611202000112070a01621202000112070a01791202000a1a1012020001620a0a01021201011a020707
+case
+message: operations_research.sat.CpModelProto
+text:
+| constraints {
+|   linear {
+|     vars: 0
+|     vars: 1
+|     vars: 2
+|     coeffs: 1
+|     coeffs: 2
+|     coeffs: -1
+|     domain: 0
+|     domain: 0
+|   }
+| }
+| objective { vars: 2 coeffs: -1 scaling_factor: -1 }
+bytes: 1a1962170a03000102120c0102ffffffffffffffffff011a02000022180a010219000000000000f0bf220affffffffffffffffff01
