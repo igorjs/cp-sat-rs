@@ -99,7 +99,8 @@ jobs:
   # system libraries.
   reference:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Twice the measured build time of 17 minutes.
+    timeout-minutes: 35
     env:
       REFERENCE_PREFIX: ${{ github.workspace }}/.reference
     steps:
