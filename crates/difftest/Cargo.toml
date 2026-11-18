@@ -18,12 +18,19 @@ name = "capture"
 path = "src/bin/capture.rs"
 required-features = ["reference"]
 
+[[bin]]
+name = "difftest"
+path = "src/bin/difftest.rs"
+required-features = ["reference"]
+
 [dependencies]
+cpsat-port = { path = "../port" }
+cpsat-proto = { path = "../proto" }
+cpsat-sat = { path = "../sat" }
+cpsat-testutil = { path = "../testutil" }
 cxx = { workspace = true, optional = true }
+prost.workspace = true
 
 [build-dependencies]
 cxx-build = { workspace = true, optional = true }
 
-[dev-dependencies]
-cpsat-proto = { path = "../proto" }
-prost.workspace = true

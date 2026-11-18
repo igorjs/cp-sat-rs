@@ -108,7 +108,10 @@ dependencies = [
 name = "cpsat-difftest"
 version = "0.0.0"
 dependencies = [
+ "cpsat-port",
  "cpsat-proto",
+ "cpsat-sat",
+ "cpsat-testutil",
  "cxx",
  "cxx-build",
  "prost",
