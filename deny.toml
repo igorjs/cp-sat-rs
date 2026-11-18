@@ -4,6 +4,8 @@ version = 2
 [licenses]
 version = 2
 allow = ["Apache-2.0", "MIT", "BSD-3-Clause", "Unicode-3.0"]
+# A build-time dependency of prost-build, through petgraph and hashbrown.
+exceptions = [{ allow = ["Zlib"], crate = "foldhash" }]
 
 [bans]
 multiple-versions = "warn"
