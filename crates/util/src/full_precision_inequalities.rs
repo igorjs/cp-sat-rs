@@ -20,6 +20,62 @@ const K_INF: f64 = f64::INFINITY;
 const K_DOUBLE_MIN: f64 = f64::from_bits(1);
 const K_DOUBLE_MAX: f64 = f64::MAX;
 
+// Function that is equivalent to std::nextafter(v, kInf), but significantly
+// faster since it doesn't need to set or check CPU flags.
+pub fn fast_step_up(v: f64) -> f64 {
+    debug_assert!(!v.is_nan());
+    const K_INF_BITS: i64 = f64::INFINITY.to_bits() as i64;
+    const K_NEG_ZERO_BITS: i64 = (-0.0_f64).to_bits() as i64;
+    let mut i = v.to_bits() as i64;
+    if i == K_NEG_ZERO_BITS {
+        i = 0;
+    }
+    i += if i != K_INF_BITS {
+        if i >= 0 { 1 } else { -1 }
+    } else {
+        0
+    };
+    f64::from_bits(i as u64)
+}
+
+// Function that is equivalent to std::nextafter(v, -kInf), but significantly
+// faster since it doesn't need to set or check CPU flags.
+pub fn fast_step_down(_v: f64) -> f64 {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Returns `e` such that `2^e <= |v| < 2^(e + 1)`.
+// For v = 0, returns `min_int`. For inf, returns `max_int`.
+pub fn fast_ilog_b(_v: f64) -> i32 {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Returns `2^exponent` if representable, otherwise 0 or infinity (depending on
+// the sign of the exponent).
+pub fn fast_one_exp(_exponent: i32) -> f64 {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Returns the closest double to `v * 2^exponent` (infinity if overflow).
+// It is truncated if the result is subnormal.
+pub fn fast_ld_exp(_v: f64, _exponent: i32) -> f64 {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Represents a power of two, i.e. 2^exponent. Used for the API of TightSum.
+// Supports between 2^-15 and 2^15 (the reason is to avoid overflows in the
+// exponent).
+#[derive(Clone, Copy, Debug)]
+pub struct PowerOfTwo {
+    pub exponent: i32,
+}
+
+impl PowerOfTwo {
+    pub fn new(_exponent: i32) -> PowerOfTwo {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+}
+
 // Represents a sum of terms with full precision. The sum is not necessarily
 // representable as a double. This is not thread-safe, but is thread-compatible.
 //
@@ -30,9 +86,10 @@ const K_DOUBLE_MAX: f64 = f64::MAX;
 // So if one adds N terms and gets the bounds no more than O(N) times, the
 // complexity is O(N + exp_spread).
 //
-// Only what `sat/cp_model_utils` calls is ported: adding a `f64` or the product of a `f64` and
-// an `i64`, and reading the tight bounds. The bounds are read through `&mut self`, since the C++
-// methods are `const` over `mutable` fields.
+// Phase 0 ports what `sat/cp_model_utils` calls: adding a `f64` or an `i64`, the product of
+// two of them, and reading the tight bounds. The rest is a stub that the LP and cuts phase
+// fills in. The bounds are read through `&mut self`, since the C++ methods are `const` over
+// `mutable` fields.
 #[derive(Clone, Debug)]
 pub struct TightSum {
     // The three fields below are used to store the sum in base 2^64. We use two
@@ -111,6 +168,24 @@ impl TightSumArg for f64 {
     }
 }
 
+impl TightSumArg for f32 {
+    fn to_term(self) -> Term {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_nan(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_finite(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_negative(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+}
+
 impl TightSumArg for i64 {
     fn to_term(self) -> Term {
         Term {
@@ -133,6 +208,42 @@ impl TightSumArg for i64 {
     }
 }
 
+impl TightSumArg for i32 {
+    fn to_term(self) -> Term {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_nan(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_finite(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_negative(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+}
+
+impl TightSumArg for PowerOfTwo {
+    fn to_term(self) -> Term {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_nan(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_finite(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    fn is_negative(self) -> bool {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+}
+
 impl Default for TightSum {
     fn default() -> Self {
         TightSum {
@@ -150,6 +261,14 @@ impl Default for TightSum {
 }
 
 impl TightSum {
+    pub fn clear(&mut self) {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    pub fn negate(&mut self) -> &mut Self {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
     // Adds the given argument to the sum. Returns itself for chaining.
     pub fn add<Arg: TightSumArg>(&mut self, arg: Arg) -> &mut Self {
         self.set_inf_if_needed(arg);
@@ -158,6 +277,11 @@ impl TightSum {
         }
         self.add_term(&arg.to_term());
         self
+    }
+
+    // `Add(const TightSum& other)`.
+    pub fn add_tight_sum(&mut self, _other: &TightSum) -> &mut Self {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
     }
 
     // Adds the product of the given arguments to the sum. Returns itself for chaining.
@@ -179,9 +303,54 @@ impl TightSum {
         self
     }
 
+    // The overload of `add_prod` for three or more arguments: the factors after the first two.
+    pub fn add_prod_with_other_args<Arg1: TightSumArg, Arg2: TightSumArg>(
+        &mut self,
+        _arg1: Arg1,
+        _arg2: Arg2,
+        _other_args: &[Term],
+    ) -> &mut Self {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    // The overload of `add_prod` for another `TightSum`.
+    pub fn add_prod_tight_sum(
+        &mut self,
+        _other: &TightSum,
+        _negate: bool,
+        _scaling: PowerOfTwo,
+    ) -> &mut Self {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    // Behind the comparison operators of C++ with a double: `sum <=> x`.
+    pub fn compare_to_f64(&mut self, _x: f64) -> Ordering {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    // Behind the comparison operators of C++ with an int64: `sum <=> x`.
+    pub fn compare_to_i64(&mut self, _x: i64) -> Ordering {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
     // Returns true if no infinite terms have been added to the sum.
     pub fn is_finite(&self) -> bool {
         self.inf_sign == Ordering::Equal
+    }
+
+    // Deprecated upstream: use `tight_bounds`.
+    pub fn loose_bounds(&mut self) -> (f64, f64) {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    // Deprecated upstream: use `tight_lower_bound`.
+    pub fn loose_lower_bound(&mut self) -> f64 {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
+    }
+
+    // Deprecated upstream: use `tight_upper_bound`.
+    pub fn loose_upper_bound(&mut self) -> f64 {
+        unimplemented!("phase 4: util/full_precision_inequalities.cc")
     }
 
     // Returns the tight bounds of the sum. In other words, returns [lb, ub]
@@ -224,6 +393,51 @@ impl TightSum {
     pub fn int64_ceil(&mut self) -> Option<i64> {
         self.int64_bounds().1
     }
+}
+
+// Returns the sum of a vector of doubles or int64_t.
+pub fn tight_sum_of<Number: TightSumArg>(_v: &[Number]) -> TightSum {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Returns the dot product of two vectors of double or int64_t.
+pub fn tight_dot_product<Number1: TightSumArg, Number2: TightSumArg>(
+    _v: &[Number1],
+    _w: &[Number2],
+) -> TightSum {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// For any combination of int64_t, finite double and PowerOfTwo, ProdBounds(a,
+// b, p) returns a tight pair of bounds [lb, ub] such that lb <= a * b * p <= ub
+// in R. The four overloads of C++ are one function over the types of rule 17.
+pub fn prod_bounds<A: TightSumArg, B: TightSumArg>(_a: A, _b: B, _p: PowerOfTwo) -> (f64, f64) {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// For any combination of int64_t, finite double and PowerOfTwo,
+// ProdFloorCeil(a, b, p) returns Floor(a * b * p) and Ceil(a * b * p) as
+// int64_t. If the result is not representable as int64_t, returns {nullopt,
+// int64min} or {int64max, nullopt} depending on the sign.
+pub fn prod_floor_ceil<A: TightSumArg, B: TightSumArg>(
+    _a: A,
+    _b: B,
+    _p: PowerOfTwo,
+) -> (Option<i64>, Option<i64>) {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Returns a tight double interval containing n.
+pub fn int64_double_bounds(_n: i64) -> (f64, f64) {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
+}
+
+// Tight bounds [lb, ub] containing the exact rational quotient `a / b` for a
+// finite `a` and a finite `b != 0` (`{q, q}` when `q = a / b` is exact, and a
+// 1-ulp interval otherwise). A quotient that is too large to be representable
+// gives `{max_double, inf}` (or `{-inf, -max_double}`).
+pub fn quotient_bounds(_a: f64, _b: f64) -> (f64, f64) {
+    unimplemented!("phase 4: util/full_precision_inequalities.cc")
 }
 
 impl TightSum {
@@ -467,22 +681,6 @@ impl TightSum {
     }
 }
 
-fn fast_step_up(v: f64) -> f64 {
-    debug_assert!(!v.is_nan());
-    const K_INF_BITS: i64 = f64::INFINITY.to_bits() as i64;
-    const K_NEG_ZERO_BITS: i64 = (-0.0_f64).to_bits() as i64;
-    let mut i = v.to_bits() as i64;
-    if i == K_NEG_ZERO_BITS {
-        i = 0;
-    }
-    i += if i != K_INF_BITS {
-        if i >= 0 { 1 } else { -1 }
-    } else {
-        0
-    };
-    f64::from_bits(i as u64)
-}
-
 fn reconstruct_double(mantissa: u64, biased_exp: u64) -> f64 {
     f64::from_bits((biased_exp << 52) | (mantissa & !(1_u64 << 52)))
 }
@@ -593,6 +791,113 @@ fn to_floor_ceil(mantissa: i64, exponent: i32, exact: bool) -> (Option<i64>, Opt
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // PENDING(phase 4): TEST_P(ComputeSumSignTest, Pos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ComputeSumSignTest, Neg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(IsDotProductCmpOrEqualTest, PosPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(IsDotProductCmpOrEqualTest, PosNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(IsDotProductCmpOrEqualTest, NegPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(IsDotProductCmpOrEqualTest, NegNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(IsDotProductCmpOrEqualTest, VeryLongSum), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(GetTightDotProductBoundsTest, PosPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(GetTightDotProductBoundsTest, PosNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(GetTightDotProductBoundsTest, NegPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(GetTightDotProductBoundsTest, NegNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntIntTest, PosPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntIntTest, PosNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntIntTest, NegPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntIntTest, NegNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntDoubleTest, PosPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntDoubleTest, PosNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntDoubleTest, NegPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsIntDoubleTest, NegNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsDoubleDoubleTest, PosPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsDoubleDoubleTest, PosNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsDoubleDoubleTest, NegPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdBoundsDoubleDoubleTest, NegNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdFloorCeilIntIntTest, FloorAndCeilMatchExpected), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdFloorCeilIntDoubleTest, FloorAndCeilMatchExpected), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(ProdFloorCeilDoubleDoubleTest, FloorAndCeilMatchExpected), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(Int64DoubleBoundsTest, Pos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(Int64DoubleBoundsTest, Neg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(QuotientBoundsTest, PosPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(QuotientBoundsTest, PosNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(QuotientBoundsTest, NegPos), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(QuotientBoundsTest, NegNeg), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, DefaultConstructedIsZero), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, AddProdSingleArgumentTypesAndChaining), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, AddProdTwoArgumentCombinations), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, AddProdThreeOrMoreArgumentsWithoutOverflow), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, AddProdThreeOrMoreArgumentsWithMantissaOverflow), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, AddProdTenArgumentsWithDelayedMantissaOverflow), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumComparisonTest, LValueAndRValueComparisons), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumComparisonTest, NegatedComparisons), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumInt64ComparisonTest, LValueAndRValueComparisons), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumInt64ComparisonTest, NegatedComparisons), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumTightBoundsTest, BoundsAndSpecificationInvariants), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumTightBoundsTest, NegatedBounds), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, UnderflowSubnormalBounds), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, Int64ExtremeValues), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, AccumulatorUint128Overflow), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, IncrementalAdditionsAndQueries), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, InfiniteProductsAndConsistentSigns), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, TightSumOfAndTightDotProductHelpers), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumDeathTest, InvalidInputsCrash), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST_P(TightSumFloorCeilTest, FloorAndCeilMatchExpected), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, SaturatedFloorAndCeilUnderflowSubnormals), needs util/full_precision_inequalities.cc
+
+    #[test]
+    fn tight_sum_test_infinite_works() {
+        // Arrange
+        const K_INF: f64 = f64::INFINITY;
+
+        // Act and Assert
+        assert_eq!(
+            TightSum::default().add(K_INF).tight_bounds(),
+            (K_INF, K_INF)
+        );
+        assert_eq!(
+            TightSum::default().add(-K_INF).tight_bounds(),
+            (-K_INF, -K_INF)
+        );
+    }
+
+    // PENDING(phase 4): TEST(TightSumTest, AddAndAddProdWithTightSum), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(TightSumTest, Negate), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(FastILogBTest, SpecialValues), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(FastILogBTest, NormalAndSubnormalValues), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(FastOneExpTest, NormalSubnormalAndOutOfRangeExponents), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(FastLdExpTest, ZeroAndInfinities), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(FastLdExpTest, NormalInputsToNormalSubnormalUnderflowAndOverflow), needs util/full_precision_inequalities.cc
+    // PENDING(phase 4): TEST(FastLdExpTest, SubnormalInputsToZeroSubnormalNormalAndOverflow), needs util/full_precision_inequalities.cc
+
+    // The bounds of the next two tests were read from the reference build at the pinned commit.
+    #[test]
+    fn a_negative_sum_that_is_not_a_double_gets_one_step_wide_bounds() {
+        // Arrange
+        let mut sum = TightSum::default();
+
+        // Act
+        sum.add(-1.0_f64).add(-(2.0_f64.powi(-53)));
+
+        // Assert
+        assert_eq!(sum.tight_bounds(), (-(1.0_f64.next_up()), -1.0));
+        assert_eq!(sum.int64_bounds(), (Some(-2), Some(-1)));
+    }
+
+    // The case `{1.0, -denorm_min}` of the parameters of `TightSumTightBoundsTest`.
+    #[test]
+    fn a_sum_just_under_a_double_gets_bounds_that_end_on_it() {
+        // Arrange
+        let mut sum = TightSum::default();
+
+        // Act
+        sum.add(1.0_f64).add(-f64::from_bits(1));
+
+        // Assert
+        assert_eq!(sum.tight_bounds(), (1.0_f64.next_down(), 1.0));
+        assert_eq!(sum.int64_bounds(), (Some(0), Some(1)));
+    }
 
     #[test]
     fn a_sum_that_is_not_a_double_gets_one_step_wide_bounds() {

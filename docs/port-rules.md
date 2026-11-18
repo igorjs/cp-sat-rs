@@ -394,10 +394,10 @@ pub fn format_literals(literals: &[Literal]) -> String
 
 ## 26. Protobuf messages
 
-A generated C++ message is the `prost` struct of `cpsat-proto`. A repeated field is a `Vec` and `x_size()` is `x.len()`. A singular message field is an `Option`: `has_x()` is `x.is_some()`, the const getter of an unset field is the empty default message (a `match` or `if let` that skips the case), and `mutable_x()` is `x.get_or_insert_default()`, which creates the field as C++ does. A `oneof` is the `Option` of the generated enum, matched in the order of the C++ `switch`. `Clear()` is `*message = Default::default()`.
+A generated C++ message is the `prost` struct of `cpsat-proto`. A repeated field is a `Vec` and `x_size()` is `x.len()`. A singular message field is an `Option`: `has_x()` is `x.is_some()`, the const getter of an unset field is the empty default message. A reader skips an unset field only when the empty message adds nothing: `FingerprintExpression` (`sat/cp_model_utils.cc:1095`) hashes `lin.offset()` even for an empty expression, so a reader of an unset expression must still hash the default message, and `mutable_x()` is `x.get_or_insert_default()`, which creates the field as C++ does. A `oneof` is the `Option` of the generated enum, matched in the order of the C++ `switch`. `Clear()` is `*message = Default::default()`.
 
 ```cpp
-if (proto->has_target()) f(proto->mutable_target());   // sat/cp_model_utils.cc:524
+if (proto->has_target()) f(proto->mutable_target());   // sat/cp_model_utils.cc:538
 for (int& r : *ct->mutable_enforcement_literal()) f(&r);   // sat/cp_model_utils.cc:268
 ```
 
@@ -411,8 +411,8 @@ for r in &mut ct.enforcement_literal { f(r); }
 `absl::FunctionRef<void(T)>` is a generic parameter `impl FnMut(T)`, taken by value. A default argument that has a value is an explicit parameter, and the caller writes the default. A C++ name that is a Rust keyword takes a trailing underscore (`Const` is `const_`).
 
 ```cpp
-int64_t LinearExpressionGcd(const LinearExpressionProto& expr, int64_t gcd = 0);   // sat/cp_model_utils.h:170
-static constexpr AffineExpr Const(int64_t cst);   // sat/cp_model_utils.h:105
+int64_t LinearExpressionGcd(const LinearExpressionProto& expr, int64_t gcd = 0);   // sat/cp_model_utils.h:169
+static constexpr AffineExpr Const(int64_t cst);   // sat/cp_model_utils.h:122
 ```
 
 ```rust
@@ -434,7 +434,7 @@ pub static CP_MODEL_DUMP_MODELS: AtomicBool = AtomicBool::new(false);
 
 ## 29. Staged ports of a long file
 
-A file over 2,000 lines goes out in several pull requests, one for each function group. A test case whose function belongs to a later group is one `// PENDING(phase 1): TEST(Suite, Name), needs the Nth group of <upstream file>` line at its upstream position, and the baseline counts it in `pending`. The phase is 1 because the check rejects a pending line at or below the current phase; the last pull request of the file leaves no pending line, and no stub stands in for a later function.
+A file whose header and source together pass 2,000 lines goes out in several pull requests, one for each function group. A test case whose function belongs to a later group is one `// PENDING(phase 1): TEST(Suite, Name), needs the Nth group of <upstream file>` line at its upstream position, and the baseline counts it in `pending`. The phase is the phase after the current one, because the check rejects a pending line at or below the current phase; the last pull request of the file leaves no pending line, and no stub stands in for a later function.
 
 ## 30. Templates over generated messages and `mutable` fields
 
@@ -442,8 +442,8 @@ A C++ template over message types that share a field (`ProtoWithDomain`) is a tr
 
 ```cpp
 template <typename ProtoWithDomain>
-bool DomainInProtoContains(const ProtoWithDomain& proto, int64_t value);   // sat/cp_model_utils.h:219
-std::pair<double, double> TightBounds() const;   // util/full_precision_inequalities.h:200
+bool DomainInProtoContains(const ProtoWithDomain& proto, int64_t value);   // sat/cp_model_utils.h:244
+std::pair<double, double> TightBounds() const;   // util/full_precision_inequalities.h:171
 ```
 
 ```rust
@@ -457,7 +457,7 @@ A C++ `reinterpret_cast<const char*>` over a field or a repeated field, to hash 
 
 ```cpp
 fasthash64(reinterpret_cast<const char*>(&field), sizeof(T), seed);   // sat/cp_model_utils.h:499
-ConstraintProto::ConstraintCase::kBoolOr   // sat/cp_model_utils.h:600
+ConstraintProto::ConstraintCase::kBoolOr   // sat/cp_model_utils.h:636
 ```
 
 ```rust

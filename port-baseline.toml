@@ -350,14 +350,75 @@ reason = "upstream has no case for LiteralsToLinear"
 name = "find_complementary_var_in_sorted_literals_dies_on_unsorted_literals_in_debug"
 reason = "checks the DCHECK of a sorted input"
 
-# util/full_precision_inequalities is ported in part, only what sat/cp_model_utils calls. Its
-# upstream test file is not ported, so every test here is an added test.
+[[file.added]]
+name = "affine_expr_to_string_of_the_smallest_offset_matches_the_reference"
+reason = "checks the text for the smallest int64 offset against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_offset_and_0_matches_the_reference"
+reason = "checks the std::abs of the smallest int64 offset against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_coefficient_and_0_matches_the_reference"
+reason = "checks the std::abs of the smallest int64 coefficient against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_offset_and_6_matches_the_reference"
+reason = "checks the gcd of the smallest int64 offset and 6 against the reference build"
+
+[[file.added]]
+name = "linear_expression_gcd_of_the_smallest_coefficient_and_6_matches_the_reference"
+reason = "checks the gcd of the smallest int64 coefficient and 6 against the reference build"
+
+[[file.added]]
+name = "expression_contains_single_ref_of_the_smallest_coefficient_matches_the_reference"
+reason = "checks the std::abs of the smallest int64 coefficient against the reference build"
+
+[[file.added]]
+name = "fingerprint_model_of_a_model_with_a_linear_and_a_lin_max_matches_the_reference"
+reason = "checks golden fingerprints of the reference build"
+
+[[file.added]]
+name = "fingerprint_model_of_a_model_with_boolean_constraints_matches_the_reference"
+reason = "checks golden fingerprints of the reference build"
+
+[[file.added]]
+name = "fingerprint_model_of_a_model_with_all_diff_and_element_matches_the_reference"
+reason = "checks golden fingerprints of the reference build"
+
+[[file.added]]
+name = "fingerprint_expression_of_an_expression_with_terms_matches_the_reference"
+reason = "checks golden fingerprints of the reference build with two seeds"
+
+[[file.added]]
+name = "fingerprint_expression_of_a_constant_matches_the_reference"
+reason = "checks golden fingerprints of the reference build with two seeds"
+
+[[file.added]]
+name = "fingerprint_expression_of_an_empty_expression_matches_the_reference"
+reason = "checks golden fingerprints of an empty expression with two seeds"
+
+[[file.added]]
+name = "combine_seed_matches_the_reference"
+reason = "checks golden seeds of the reference build"
+
+[[file.added]]
+name = "constraint_case_names_the_kind_of_each_constraint_and_the_unset_case"
+reason = "checks the kind of every constraint, the Rust form of the generated constraint_case()"
+
+[[file.added]]
+name = "canonicalize_lin_max_of_another_constraint_dies_in_debug_and_switches_in_release"
+reason = "checks the DCHECK in debug and the switch of the oneof in release"
+
+# util/full_precision_inequalities is ported in part: what sat/cp_model_utils calls. The rest is
+# a stub and each upstream case that needs it is a pending line.
 [[file]]
-upstream = "util/full_precision_inequalities.h"
+upstream = "util/full_precision_inequalities_test.cc"
 rust = "crates/util/src/full_precision_inequalities.rs"
 binary = "cpsat_util"
 module = "full_precision_inequalities::tests"
-upstream_cases = 0
+upstream_cases = 62
+pending = 61
 
 [[file.added]]
 name = "a_sum_that_is_not_a_double_gets_one_step_wide_bounds"
@@ -386,3 +447,11 @@ reason = "checks the CHECK_EQ of the infinite sign"
 [[file.added]]
 name = "an_infinite_factor_times_zero_dies"
 reason = "checks the CHECK_NE of the zero factor"
+
+[[file.added]]
+name = "a_negative_sum_that_is_not_a_double_gets_one_step_wide_bounds"
+reason = "checks the bounds of -1 - 2^-53, which no double holds"
+
+[[file.added]]
+name = "a_sum_just_under_a_double_gets_bounds_that_end_on_it"
+reason = "ports a parameter row of an upstream case that needs unported items: 1 - denorm_min"
