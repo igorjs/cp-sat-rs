@@ -435,3 +435,32 @@ pub static CP_MODEL_DUMP_MODELS: AtomicBool = AtomicBool::new(false);
 ## 29. Staged ports of a long file
 
 A file over 2,000 lines goes out in several pull requests, one for each function group. A test case whose function belongs to a later group is one `// PENDING(phase 1): TEST(Suite, Name), needs the Nth group of <upstream file>` line at its upstream position, and the baseline counts it in `pending`. The phase is 1 because the check rejects a pending line at or below the current phase; the last pull request of the file leaves no pending line, and no stub stands in for a later function.
+
+## 30. Templates over generated messages and `mutable` fields
+
+A C++ template over message types that share a field (`ProtoWithDomain`) is a trait with the accessors the template calls, implemented for each message type the code uses. A C++ `const` method that changes `mutable` fields takes `&mut self` in Rust, which the caller already holds.
+
+```cpp
+template <typename ProtoWithDomain>
+bool DomainInProtoContains(const ProtoWithDomain& proto, int64_t value);   // sat/cp_model_utils.h:219
+std::pair<double, double> TightBounds() const;   // util/full_precision_inequalities.h:200
+```
+
+```rust
+pub fn domain_in_proto_contains<P: ProtoWithDomain>(proto: &P, value: i64) -> bool
+pub fn tight_bounds(&mut self) -> (f64, f64)
+```
+
+## 31. Raw bytes of a field, and the case enum of a `oneof`
+
+A C++ `reinterpret_cast<const char*>` over a field or a repeated field, to hash its memory, is a trait that appends the native-endian bytes of each element. A C++ `oneof` case enum is a Rust enum of the same cases, numbered by the field numbers, since the generated Rust code holds the `oneof` as an `Option` and has no such enum.
+
+```cpp
+fasthash64(reinterpret_cast<const char*>(&field), sizeof(T), seed);   // sat/cp_model_utils.h:499
+ConstraintProto::ConstraintCase::kBoolOr   // sat/cp_model_utils.h:600
+```
+
+```rust
+fasthash64(&bytes_of_field, seed)   // bytes from field.to_ne_bytes()
+ConstraintCase::BoolOr
+```
