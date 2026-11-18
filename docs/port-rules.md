@@ -242,7 +242,7 @@ reason = "why upstream has no such case"
 
 ## 15. Test names
 
-The unit test of a file lives in its module as `#[cfg(test)] mod tests`, in upstream order. `TEST(Suite, Name)` and `TEST_F(Suite, Name)` become `fn suite_name` in `snake_case`. `cargo xtask port-map --check --upstream` matches the names, so a renamed test fails CI.
+The unit test of a file lives in its module as `#[cfg(test)] mod tests`, in upstream order. `TEST(Suite, Name)`, `TEST_F(Suite, Name)` and `TEST_P(Suite, Name)` become `fn suite_name` in `snake_case`. A run of capital letters stays one word: `CPModel` is `cp_model`. `cargo xtask port-map --check --upstream` matches the names, so a renamed test fails CI.
 
 ```cpp
 TEST(ClosedIntervalConstructorTest, DFatalInNonOptIfStartGreaterThanEnd) {   // util/sorted_interval_list_test.cc:43
