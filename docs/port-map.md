@@ -406,8 +406,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | set_cover | `set_cover/set_cover_model.h` | 606 | `set_cover/set_cover_model_test.cc` | 37 | `base/strong_int.h`, `base/strong_vector.h`, `set_cover/base_types.h` | 3 | - | todo |
 | util | `util/adaptative_parameter_value.h` | 83 | `util/adaptative_parameter_value_test.cc` | 9 | - | 0 | - | todo |
 | util | `util/affine_relation.h` | 223 | `util/affine_relation_test.cc` | 3 | `base/iterator_adaptors.h` | 1 | - | todo |
-| util | `util/bitset.cc` | 112 | `util/bitset_test.cc` | 38 | `util/bitset.h` | 1 | 0 | todo |
-| util | `util/bitset.h` | 680 | `util/bitset_test.cc` | 38 | - | 0 | 0 | todo |
+| util | `util/bitset.cc` | 112 | `util/bitset_test.cc` | 38 | `util/bitset.h` | 1 | 0 | done |
+| util | `util/bitset.h` | 680 | `util/bitset_test.cc` | 38 | - | 0 | 0 | done |
 | util | `util/dense_set.h` | 151 | `util/dense_set_test.cc` | 9 | - | 0 | - | todo |
 | util | `util/deterministic_time.cc` | 70 | none | - | `util/deterministic_time.h` | 3 | - | todo |
 | util | `util/deterministic_time.h` | 768 | none | - | `util/time_limit.h` | 2 | - | todo |

@@ -20,15 +20,7 @@
 //! `cap_prod_generic`) use bit tricks only. `cap_add`, `cap_sub` and `cap_prod` call the
 //! built-in versions, as upstream does under GCC and Clang.
 
-// Upstream calls `MostSignificantBitPosition64` of `util/bitset.h`, which is not ported yet.
-// This is its `kStd` form: the position of the highest set bit, and 0 for 0.
-fn most_significant_bit_position64(n: u64) -> i32 {
-    if n == 0 {
-        0
-    } else {
-        63 - n.leading_zeros() as i32
-    }
-}
+use crate::bitset::most_significant_bit_position64;
 
 /// A strong integer type over `i64`, as made by `DEFINE_STRONG_INT64_TYPE`.
 pub trait StrongInt64: Copy {

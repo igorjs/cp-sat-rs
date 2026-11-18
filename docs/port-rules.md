@@ -138,14 +138,21 @@ if params.max_time_in_seconds() > 0.0 {
 
 ## 10. Typed tests
 
-A `TYPED_TEST` becomes one Rust test per type of the upstream type list. A macro makes them, so each has its own name and its own pass or fail.
+A `TYPED_TEST` becomes one Rust test per type of the upstream type list. The body is one generic function over the type, and a macro makes the tests, so each has its own name and its own pass or fail. The macro takes the test names as well as the types, since a macro cannot join identifiers. Each name starts with the name rule 15 gives the typed test.
 
 ```cpp
 TYPED_TEST(BitIndex, SingleBit) {   // util/bitset_test.cc:132, 10 types
 ```
 
 ```rust
-typed_test!(bit_index_single_bit, [Lsb32Basic, Lsb32DeBruijn, /* the other 8 types */], |T| { /* body */ });
+fn bit_index_single_bit<T: TestCase>() { /* body */ }
+
+typed_test!(
+    bit_index_single_bit,
+    bit_index_single_bit_lsb_32_basic => Lsb32Basic,
+    bit_index_single_bit_lsb_32_de_bruijn => Lsb32DeBruijn,
+    /* the other 8 types */
+);
 ```
 
 ## 11. `base/` headers
@@ -288,4 +295,44 @@ const ThisType operator++(int);   // util/strong_integers.h:114
 
 ```rust
 pub fn post_increment(&mut self) -> Self
+```
+
+## 19. Overloads and names that collide
+
+A C++ overload set whose members take different parameter lists keeps the name for the first member in header order. Each later member adds a suffix that names what is new in its parameters. Two C++ names that differ only by case, such as `Resize` and `resize`, get the same treatment: the one with the odd parameter type takes the suffix.
+
+```cpp
+int64_t LeastSignificantBitPosition64(const uint64_t* bitset, uint64_t start, uint64_t end);   // util/bitset.h:261
+```
+
+```rust
+pub fn least_significant_bit_position64_in_range(bitset: &[u64], start: u64, end: u64) -> i64
+```
+
+## 20. Operators that have no operator in Rust
+
+`operator[]` that returns a `bool` is the `Index` trait with `Output = bool`, which hands out a reference to a constant `true` or `false`. `operator*` of an iterator is a method `current()`, and the iterator also implements `Iterator`. `begin()` and `end()` stay as methods.
+
+```cpp
+bool operator[](IndexType index) const { return IsSet(index); }   // util/bitset.h:383
+```
+
+```rust
+impl<I: BitsetIndex> Index<I> for Bitset64<I> {
+    type Output = bool;
+    fn index(&self, index: I) -> &bool { if self.is_set(index) { &true } else { &false } }
+}
+```
+
+## 21. Template arguments that are enum values
+
+Stable Rust has no enum const generics, so a C++ template argument that is an enum value is a function argument in Rust. A `static_assert` on such an argument becomes a `panic!` at run time.
+
+```cpp
+template <BitScanAlgorithm algo = BitScanAlgorithm::kStd, typename T>
+inline int LeastSignificantBitPosition(T n);   // util/bitset.h:90
+```
+
+```rust
+pub fn least_significant_bit_position<T: BitScanWord>(algo: BitScanAlgorithm, n: T) -> i32
 ```
