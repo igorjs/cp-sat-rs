@@ -53,6 +53,23 @@ jobs:
         run: cargo test --workspace
       - if: hashFiles('crates/*/Cargo.toml', 'xtask/Cargo.toml') != ''
         run: cargo test --workspace --release
+      # The counts check reads the base branch of a pull request, so that branch is fetched.
+      - if: github.base_ref != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      - if: hashFiles('crates/*/Cargo.toml', 'xtask/Cargo.toml') != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          base_args=()
+          if [ -n "${BASE_REF}" ]; then
+            base_args=(--base "origin/${BASE_REF}")
+          fi
+          cargo xtask port-map --check "${base_args[@]}"
+          cargo xtask port-map --check --release "${base_args[@]}"
+      - if: hashFiles('crates/*/Cargo.toml', 'xtask/Cargo.toml') != ''
+        run: scripts/check-red.sh
 
   msrv:
     runs-on: ubuntu-latest
@@ -113,6 +130,15 @@ jobs:
       - if: steps.reference-cache.outputs.cache-hit != 'true'
         run: sudo apt-get update && sudo apt-get install --yes libbz2-dev
       - run: scripts/build-reference.sh
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - if: hashFiles('xtask/Cargo.toml') != ''
+        run: cargo xtask port-map --check --upstream
+      - if: hashFiles('xtask/Cargo.toml') != ''
+        run: cargo xtask port-map
+      - if: hashFiles('xtask/Cargo.toml') != ''
+        run: git diff --exit-code docs/port-map.md
       # Saves a finished build even when the job is cancelled afterwards.
       - if: always() && steps.reference-cache.outputs.cache-hit != 'true' && hashFiles('.reference/.reference-commit') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
