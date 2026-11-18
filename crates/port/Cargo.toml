@@ -1,0 +1,18 @@
+[package]
+name = "cpsat-port"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "cpsat_port"
+
+[dependencies]
+cpsat-proto = { path = "../proto" }
+prost.workspace = true
+prost-reflect.workspace = true
+
+[dev-dependencies]
+cpsat-testutil = { path = "../testutil" }

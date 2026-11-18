@@ -1,0 +1,61 @@
+# Messages for the debug string tests. The last case holds limit pairs for the three forms
+# of ProtobufDebugString (text, base64, type and size), at and just past each boundary. Two
+# earlier cases hold one pair for base64 with padding.
+case
+message: operations_research.sat.LinearConstraintProto
+bytes: 0a020001120b02fdffffffffffffffff011a0bfbffffffffffffffff010a
+case
+message: operations_research.sat.ConstraintProto
+bytes: 0a0163120affffffffffffffffff01620a0a01001201011a020005
+case
+message: operations_research.sat.IntegerVariableProto
+bytes: 0a01781202000a
+limits: 10000 1
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 0a010011000000000000f83f199a9999999999b9bf220102
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 0a010311408cb5781daf15441948afbc9af2d77a3e2201012a020064
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 119a9999999999b93f19756b7e54346f9d41
+case
+message: operations_research.sat.SatParameters
+bytes: 1002f80107a1020000000000000440c80201f00c08
+case
+message: operations_research.sat.SatParameters
+bytes: 1001f80101a1027dc39425ad49b254da0a0e64656661756c742076616c756564
+limits: 10000 1
+case
+message: operations_research.sat.CpModelProto
+bytes: 
+case
+message: operations_research.sat.CpModelProto
+bytes: 0a207461620968657265202271756f74656422205c20636166c3a9200120656e640a
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 11010000000000000019010000000000f03f
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 11000000000000f07f19000000000000f0ff
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 11000000000000f87f
+case
+message: operations_research.sat.CpModelProto
+bytes: 0a0869742773207f200d2200
+case
+message: operations_research.sat.SatParameters
+bytes: 1000f80180808080f8ffffffff01c002ffffffffffffffff7f
+case
+message: operations_research.sat.CpModelProto
+bytes: 0a016d12070a01781202000a12100a0179120bfbffffffffffffffff01051a0e620c0a020001120201021a02001422060a0100220101
+limits: 100000 1000
+limits: 313 26
+limits: 312 1000
+limits: 100000 25
+limits: 123 1000
+limits: 122 1000
+limits: 5 1000
+limits: -1 1000
