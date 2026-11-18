@@ -455,3 +455,10 @@ reason = "checks the bounds of -1 - 2^-53, which no double holds"
 [[file.added]]
 name = "a_sum_just_under_a_double_gets_bounds_that_end_on_it"
 reason = "ports a parameter row of an upstream case that needs unported items: 1 - denorm_min"
+
+[[file]]
+upstream = "sat/primary_variables_test.cc"
+rust = "crates/sat/src/primary_variables.rs"
+binary = "cpsat_sat"
+module = "primary_variables::tests"
+upstream_cases = 3
