@@ -154,8 +154,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | lp_data | `lp_data/sparse_row.h` | 66 | `lp_data/sparse_row_test.cc` | 5 | `base/strong_vector.h`, `lp_data/sparse_vector.h` | 5 | - | todo |
 | lp_data | `lp_data/sparse_vector.h` | 1033 | `lp_data/sparse_vector_test.cc` | 25 | `graph/iterators.h`, `lp_data/lp_types.h`, `lp_data/permutation.h`, `util/return_macros.h` | 4 | - | todo |
 | port | `port/attributes.h` | 34 | none | - | - | 0 | - | todo |
-| port | `port/proto_utils.cc` | 48 | none | - | `port/proto_utils.h` | 3 | 0 | todo |
-| port | `port/proto_utils.h` | 167 | none | - | `base/macros/os_support.h`, `base/types.h`, `util/parse_proto.h` | 2 | 0 | todo |
+| port | `port/proto_utils.cc` | 48 | none | - | `port/proto_utils.h` | 3 | 0 | done |
+| port | `port/proto_utils.h` | 167 | none | - | `base/macros/os_support.h`, `base/types.h`, `util/parse_proto.h` | 2 | 0 | done |
 | port | `port/sysinfo.cc` | 87 | `port/sysinfo_test.cc` | 1 | `base/macros/os.h`, `port/sysinfo.h` | 1 | - | todo |
 | port | `port/sysinfo.h` | 35 | `port/sysinfo_test.cc` | 1 | - | 0 | - | todo |
 | sat | `sat/2d_distances_propagator.cc` | 246 | none | - | `base/stl_util.h`, `sat/2d_distances_propagator.h`, `sat/integer.h`, `sat/integer_base.h`, `sat/linear_propagation.h`, `sat/model.h`, `sat/no_overlap_2d_helper.h`, `sat/precedences.h`, `sat/sat_literal.h`, `sat/sat_trail.h`, `sat/scheduling_helpers.h`, `sat/synchronization.h`, `util/deterministic_time.h`, `util/time_limit.h` | 16 | - | todo |

@@ -1,1 +1,53 @@
 phase = 0
+
+# port/proto_utils has no upstream test file, so every test here is an added test.
+[[file]]
+upstream = "port/proto_utils.h"
+rust = "crates/port/src/proto_utils.rs"
+binary = "cpsat_port"
+module = "proto_utils::tests"
+upstream_cases = 0
+
+[[file.added]]
+name = "short_text_equals_the_text_of_the_reference"
+reason = "upstream has no test for this header; checks the short text against the C++ text"
+
+[[file.added]]
+name = "long_text_equals_the_text_of_the_reference"
+reason = "checks the long text with the default limits against the C++ text"
+
+[[file.added]]
+name = "limited_text_equals_the_text_of_the_reference_for_each_branch"
+reason = "checks the text, base64 and type forms against the C++ text at and past each limit"
+
+[[file.added]]
+name = "proto_enum_to_string_returns_the_upstream_name"
+reason = "checks the name of an enum value"
+
+[[file.added]]
+name = "proto_enum_to_string_names_an_invalid_value"
+reason = "checks the text for a number the enum does not define"
+
+[[file.added]]
+name = "parse_text_proto_for_flag_fails_on_an_unknown_field_and_names_it"
+reason = "checks the failure and the error text of the parser"
+
+[[file.added]]
+name = "parse_text_proto_for_flag_reads_back_the_long_text_of_each_fixture"
+reason = "checks that the long text parses back to the same message"
+
+[[file.added]]
+name = "print_to_string_for_flag_parses_back_to_the_same_message"
+reason = "checks the one line text parses back to the same message"
+
+[[file.added]]
+name = "merge_from_string_adds_to_the_message_and_reports_bad_text"
+reason = "checks that a merge keeps the fields it does not name and fails on bad text"
+
+[[file.added]]
+name = "parse_text_proto_for_flag_clears_the_error_of_an_earlier_call"
+reason = "checks that a successful parse empties the error string, as upstream writes it on every call"
+
+[[file.added]]
+name = "debug_string_of_a_negative_zero_double_differs_from_the_reference"
+reason = "pins the known difference: prost drops a double that is -0.0 when it encodes, so the size and text miss the field"

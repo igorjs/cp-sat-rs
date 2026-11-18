@@ -1,0 +1,308 @@
+commit: c931f5f778c88050a3f71d72dfc30d3d020aa821
+kind: debug_strings
+case
+message: operations_research.sat.LinearConstraintProto
+bytes: 0a020001120b02fdffffffffffffffff011a0bfbffffffffffffffff010a
+short:
+| vars: 0 vars: 1 coeffs: 2 coeffs: -3 domain: -5 domain: 10
+long:
+| # [operations_research.sat.LinearConstraintProto of 30 bytes]
+| vars: 0
+| vars: 1
+| coeffs: 2
+| coeffs: -3
+| domain: -5
+| domain: 10
+|
+case
+message: operations_research.sat.ConstraintProto
+bytes: 0a0163120affffffffffffffffff01620a0a01001201011a020005
+short:
+| name: "c" enforcement_literal: -1 linear { vars: 0 coeffs: 1 domain: 0 domain: 5 }
+long:
+| # [operations_research.sat.ConstraintProto of 27 bytes]
+| name: "c"
+| enforcement_literal: -1
+| linear {
+|   vars: 0
+|   coeffs: 1
+|   domain: 0
+|   domain: 5
+| }
+|
+case
+message: operations_research.sat.IntegerVariableProto
+bytes: 0a01781202000a
+limits: 10000 1
+short:
+| name: "x" domain: 0 domain: 10
+long:
+| # [operations_research.sat.IntegerVariableProto of 7 bytes]
+| name: "x"
+| domain: 0
+| domain: 10
+|
+limited:
+| [operations_research.sat.IntegerVariableProto of 7 bytes] CgF4EgIACg==
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 0a010011000000000000f83f199a9999999999b9bf220102
+short:
+| vars: 0 offset: 1.5 scaling_factor: -0.1 coeffs: 2
+long:
+| # [operations_research.sat.CpObjectiveProto of 24 bytes]
+| vars: 0
+| offset: 1.5
+| scaling_factor: -0.1
+| coeffs: 2
+|
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 0a010311408cb5781daf15441948afbc9af2d77a3e2201012a020064
+short:
+| vars: 3 offset: 1e+20 scaling_factor: 1e-07 coeffs: 1 domain: 0 domain: 100
+long:
+| # [operations_research.sat.CpObjectiveProto of 28 bytes]
+| vars: 3
+| offset: 1e+20
+| scaling_factor: 1e-07
+| coeffs: 1
+| domain: 0
+| domain: 100
+|
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 119a9999999999b93f19756b7e54346f9d41
+short:
+| offset: 0.1 scaling_factor: 123456789.12345679
+long:
+| # [operations_research.sat.CpObjectiveProto of 18 bytes]
+| offset: 0.1
+| scaling_factor: 123456789.12345679
+|
+case
+message: operations_research.sat.SatParameters
+bytes: 1002f80107a1020000000000000440c80201f00c08
+short:
+| initial_polarity: POLARITY_RANDOM random_seed: 7 max_time_in_seconds: 2.5 log_search_progress: true num_workers: 8
+long:
+| # [operations_research.sat.SatParameters of 21 bytes]
+| initial_polarity: POLARITY_RANDOM
+| random_seed: 7
+| max_time_in_seconds: 2.5
+| log_search_progress: true
+| num_workers: 8
+|
+case
+message: operations_research.sat.SatParameters
+bytes: 1001f80101a1027dc39425ad49b254da0a0e64656661756c742076616c756564
+limits: 10000 1
+short:
+| initial_polarity: POLARITY_FALSE random_seed: 1 max_time_in_seconds: 1e+100 name: "default valued"
+long:
+| # [operations_research.sat.SatParameters of 32 bytes]
+| initial_polarity: POLARITY_FALSE
+| random_seed: 1
+| max_time_in_seconds: 1e+100
+| name: "default valued"
+|
+limited:
+| [operations_research.sat.SatParameters of 32 bytes] EAH4AQGhAn3DlCWtSbJU2goOZGVmYXVsdCB2YWx1ZWQ=
+case
+message: operations_research.sat.CpModelProto
+bytes:
+short:
+|
+long:
+| # [operations_research.sat.CpModelProto of 0 bytes]
+|
+case
+message: operations_research.sat.CpModelProto
+bytes: 0a207461620968657265202271756f74656422205c20636166c3a9200120656e640a
+short:
+| name: "tab\there \"quoted\" \\ caf\303\251 \001 end\n"
+long:
+| # [operations_research.sat.CpModelProto of 34 bytes]
+| name: "tab\there \"quoted\" \\ caf\303\251 \001 end\n"
+|
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 11010000000000000019010000000000f03f
+short:
+| offset: 4.94065645841247e-324 scaling_factor: 1.0000000000000002
+long:
+| # [operations_research.sat.CpObjectiveProto of 18 bytes]
+| offset: 4.94065645841247e-324
+| scaling_factor: 1.0000000000000002
+|
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 11000000000000f07f19000000000000f0ff
+short:
+| offset: inf scaling_factor: -inf
+long:
+| # [operations_research.sat.CpObjectiveProto of 18 bytes]
+| offset: inf
+| scaling_factor: -inf
+|
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 11000000000000f87f
+short:
+| offset: nan
+long:
+| # [operations_research.sat.CpObjectiveProto of 9 bytes]
+| offset: nan
+|
+case
+message: operations_research.sat.CpModelProto
+bytes: 0a0869742773207f200d2200
+short:
+| name: "it\'s \177 \r" objective { }
+long:
+| # [operations_research.sat.CpModelProto of 12 bytes]
+| name: "it\'s \177 \r"
+| objective {
+| }
+|
+case
+message: operations_research.sat.SatParameters
+bytes: 1000f80180808080f8ffffffff01c002ffffffffffffffff7f
+short:
+| initial_polarity: POLARITY_TRUE random_seed: -2147483648 max_memory_in_mb: 9223372036854775807
+long:
+| # [operations_research.sat.SatParameters of 25 bytes]
+| initial_polarity: POLARITY_TRUE
+| random_seed: -2147483648
+| max_memory_in_mb: 9223372036854775807
+|
+case
+message: operations_research.sat.CpModelProto
+bytes: 0a016d12070a01781202000a12100a0179120bfbffffffffffffffff01051a0e620c0a020001120201021a02001422060a0100220101
+limits: 100000 1000
+limits: 313 26
+limits: 312 1000
+limits: 100000 25
+limits: 123 1000
+limits: 122 1000
+limits: 5 1000
+limits: -1 1000
+limits: 100000 -1
+short:
+| name: "m" variables { name: "x" domain: 0 domain: 10 } variables { name: "y" domain: -5 domain: 5 } constraints { linear { vars: 0 vars: 1 coeffs: 1 coeffs: 2 domain: 0 domain: 20 } } objective { vars: 0 coeffs: 1 }
+long:
+| # [operations_research.sat.CpModelProto of 54 bytes]
+| name: "m"
+| variables {
+|   name: "x"
+|   domain: 0
+|   domain: 10
+| }
+| variables {
+|   name: "y"
+|   domain: -5
+|   domain: 5
+| }
+| constraints {
+|   linear {
+|     vars: 0
+|     vars: 1
+|     coeffs: 1
+|     coeffs: 2
+|     domain: 0
+|     domain: 20
+|   }
+| }
+| objective {
+|   vars: 0
+|   coeffs: 1
+| }
+|
+limited:
+| # [operations_research.sat.CpModelProto of 54 bytes]
+| name: "m"
+| variables {
+|   name: "x"
+|   domain: 0
+|   domain: 10
+| }
+| variables {
+|   name: "y"
+|   domain: -5
+|   domain: 5
+| }
+| constraints {
+|   linear {
+|     vars: 0
+|     vars: 1
+|     coeffs: 1
+|     coeffs: 2
+|     domain: 0
+|     domain: 20
+|   }
+| }
+| objective {
+|   vars: 0
+|   coeffs: 1
+| }
+|
+limited:
+| # [operations_research.sat.CpModelProto of 54 bytes]
+| name: "m"
+| variables {
+|   name: "x"
+|   domain: 0
+|   domain: 10
+| }
+| variables {
+|   name: "y"
+|   domain: -5
+|   domain: 5
+| }
+| constraints {
+|   linear {
+|     vars: 0
+|     vars: 1
+|     coeffs: 1
+|     coeffs: 2
+|     domain: 0
+|     domain: 20
+|   }
+| }
+| objective {
+|   vars: 0
+|   coeffs: 1
+| }
+|
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes] CgFtEgcKAXgSAgAKEhAKAXkSC/v//////////wEFGg5iDAoCAAESAgECGgIAFCIGCgEAIgEB
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes] CgFtEgcKAXgSAgAKEhAKAXkSC/v//////////wEFGg5iDAoCAAESAgECGgIAFCIGCgEAIgEB
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes] CgFtEgcKAXgSAgAKEhAKAXkSC/v//////////wEFGg5iDAoCAAESAgECGgIAFCIGCgEAIgEB
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes]
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes]
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes]
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes] CgFtEgcKAXgSAgAKEhAKAXkSC/v//////////wEFGg5iDAoCAAESAgECGgIAFCIGCgEAIgEB
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 110000000000000080
+short:
+| offset: -0
+long:
+| # [operations_research.sat.CpObjectiveProto of 9 bytes]
+| offset: -0
+|
+case
+message: operations_research.sat.SatParameters
+bytes: 1063
+short:
+| 2: 99
+long:
+| # [operations_research.sat.SatParameters of 2 bytes]
+| 2: 99
+|

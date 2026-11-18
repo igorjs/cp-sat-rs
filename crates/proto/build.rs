@@ -20,6 +20,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         out_dir.join(DESCRIPTOR_FILE_NAME),
         descriptors.encode_to_vec(),
     )?;
-    prost_build::Config::new().compile_fds(descriptors)?;
+    // The type names let a caller find the descriptor of a generated type.
+    prost_build::Config::new()
+        .enable_type_names()
+        .compile_fds(descriptors)?;
     Ok(())
 }
