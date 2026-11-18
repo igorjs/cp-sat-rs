@@ -135,6 +135,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpsat-sat"
+version = "0.0.0"
+dependencies = [
+ "cpsat-testutil",
+ "cpsat-util",
+]
+
+[[package]]
 name = "cpsat-testutil"
 version = "0.0.0"
 dependencies = [

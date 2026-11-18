@@ -377,3 +377,17 @@ let position = self.intervals.partition_point(|i| (i.start, i.end) < (start, end
 if cfg!(debug_assertions) { panic!("Invalid interval: {invalid}"); }
 log::error!("Invalid interval: {invalid}");
 ```
+
+## 25. Constants and stream operators on spans
+
+A C++ constant `kName` is a `pub const` named `K_NAME`, as the local constants of the ported files are. A strong type made by the macros of rule 4 has `const fn new`, so such a constant is built with it. An `operator<<` on `absl::Span<const T>` has no `Display` form in Rust, since the trait cannot be implemented for a slice: it is a free function that returns the `String`.
+
+```cpp
+const LiteralIndex kNoLiteralIndex(-1);   // sat/sat_literal.h:40
+inline std::ostream& operator<<(std::ostream& os, absl::Span<const Literal> literals);   // sat/sat_literal.h:123
+```
+
+```rust
+pub const K_NO_LITERAL_INDEX: LiteralIndex = LiteralIndex::new(-1);
+pub fn format_literals(literals: &[Literal]) -> String
+```
