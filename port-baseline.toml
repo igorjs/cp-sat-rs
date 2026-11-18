@@ -202,3 +202,43 @@ module = "sorted_interval_list::tests"
 upstream_cases = 74
 debug_only = 1
 release_only = 1
+
+[[file.added]]
+name = "smallest_value_compares_exact_magnitudes_at_i64_min"
+reason = "checks the closest value to zero for domains that start at kint64min, where std::abs and the unary minus overflow upstream"
+
+[[file.added]]
+name = "distance_wraps_on_overflow"
+reason = "checks the distance where the subtraction overflows, which upstream leaves to wrap (the TODO at line 335)"
+
+[[file.added]]
+name = "multiplication_by_i64_min_drops_every_overflowing_value"
+reason = "checks the product by kint64min, where std::abs overflows upstream, in the exact and the continuous branch"
+
+[[file.added]]
+name = "continuous_multiplication_by_i64_min_caps_by_the_sign_of_the_value"
+reason = "checks the cap of each product by kint64min, which the optimised reference takes from the sign of the value only"
+
+[[file.added]]
+name = "division_by_i64_min_divides_by_the_wrapped_absolute_value"
+reason = "checks the quotient by kint64min, where std::abs overflows upstream"
+
+[[file.added]]
+name = "inverse_multiplication_by_i64_min_divides_by_the_wrapped_absolute_value"
+reason = "checks the inverse product by kint64min; a debug build stops at the upstream check on the coefficient, as upstream does"
+
+[[file.added]]
+name = "positive_modulo_by_superset_wraps_the_negation_of_i64_min"
+reason = "checks the modulo of a negative domain whose negation overflows upstream"
+
+[[file.added]]
+name = "positive_modulo_by_superset_of_i64_min_takes_the_remainder_as_unsigned"
+reason = "checks the remainder of kint64min; a debug build stops at the upstream check on the minimum, as upstream does"
+
+[[file.added]]
+name = "quadratic_superset_wraps_the_point_after_the_parabola_minimum"
+reason = "checks that the point after a parabola minimum at kint64max wraps and does not panic"
+
+[[file.added]]
+name = "sum_of_k_min_value_in_domain_goes_past_i32_max_without_wrapping"
+reason = "checks the sum for an interval that crosses the largest int, where the upstream counter overflows"

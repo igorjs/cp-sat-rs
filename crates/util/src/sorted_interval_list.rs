@@ -59,20 +59,18 @@ impl ClosedInterval {
         }
         format!("[{},{}]", self.start, self.end)
     }
+
+    /// `operator<` (sorted_interval_list.h:73): orders by `start` only, since disjoint
+    /// intervals never share a start. It is not a `PartialOrd`, because equality compares
+    /// `end` too.
+    pub fn less_than(&self, other: &Self) -> bool {
+        self.start < other.start
+    }
 }
 
 impl fmt::Display for ClosedInterval {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.debug_string())
-    }
-}
-
-// Because we mainly manipulate vector of disjoint intervals, we only need to sort by the
-// start. This is `operator<` upstream, which has no `operator<=`, so `<=` and `>=` here
-// compare the start too. `Ord` is not implemented since the order ignores `end`.
-impl PartialOrd for ClosedInterval {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.start.cmp(&other.start))
     }
 }
 
@@ -194,7 +192,7 @@ fn sort_and_remove_invalid_intervals(intervals: &mut Vec<ClosedInterval>) {
 // Transforms a sorted list of intervals in a sorted DISJOINT list for which
 // IntervalsAreSortedAndNonAdjacent() would return true.
 fn union_of_sorted_intervals(intervals: &mut Vec<ClosedInterval>) {
-    debug_assert!(intervals.is_sorted());
+    debug_assert!(intervals.is_sorted_by_key(|interval| interval.start));
     let size = intervals.len();
     if size == 0 {
         return;
@@ -232,6 +230,14 @@ fn floor_ratio(value: i64, positive_coeff: i64) -> i64 {
     let result = value / positive_coeff;
     let adjust = i64::from(result * positive_coeff > value);
     result - adjust
+}
+
+// `CapProd(x, abs_coeff)` of sorted_interval_list.cc:585-586. For coeff == kint64min the
+// optimised build takes `abs_coeff` as non-negative, so an overflow is capped by the sign of
+// `x` alone.
+fn cap_prod_by_abs(x: i64, abs_coeff: i64) -> i64 {
+    x.checked_mul(abs_coeff)
+        .unwrap_or(if x < 0 { i64::MIN } else { i64::MAX })
 }
 
 /// We call *domain* any subset of Int64 = [kint64min, kint64max].
@@ -488,26 +494,17 @@ impl Domain {
                 return 0;
             }
             for b in [interval.start, interval.end] {
-                if b > 0 && b <= result.abs() {
+                // sorted_interval_list.cc:255-256: an optimised build compares the magnitudes
+                // exactly, also for kint64min, where std::abs and the unary minus overflow.
+                if b > 0 && b.unsigned_abs() <= result.unsigned_abs() {
                     result = b;
                 }
-                if b < 0 && -b < result.abs() {
+                if b < 0 && b.unsigned_abs() < result.unsigned_abs() {
                     result = b;
                 }
             }
         }
         result
-    }
-
-    /// If the domain contains zero, this return the simple interval around it.
-    /// Otherwise, this returns an empty domain.
-    pub fn part_around_zero(&self) -> Domain {
-        for interval in &self.intervals {
-            if interval.start <= 0 && interval.end >= 0 {
-                return Domain::new(interval.start, interval.end);
-            }
-        }
-        Domain::default()
     }
 
     /// Returns the value closest to the given point.
@@ -582,6 +579,17 @@ impl Domain {
         }
     }
 
+    /// If the domain contains zero, this return the simple interval around it.
+    /// Otherwise, this returns an empty domain.
+    pub fn part_around_zero(&self) -> Domain {
+        for interval in &self.intervals {
+            if interval.start <= 0 && interval.end >= 0 {
+                return Domain::new(interval.start, interval.end);
+            }
+        }
+        Domain::default()
+    }
+
     /// Returns true iff the domain is reduced to a single value.
     /// The domain must not be empty.
     pub fn is_fixed(&self) -> bool {
@@ -619,10 +627,11 @@ impl Domain {
                 return 0;
             }
             if interval.start > value {
-                min_distance = min_distance.min(interval.start - value);
+                // sorted_interval_list.cc:339 and 342 wrap on overflow.
+                min_distance = min_distance.min(interval.start.wrapping_sub(value));
                 break;
             } else {
-                min_distance = value - interval.end;
+                min_distance = value.wrapping_sub(interval.end);
             }
         }
         min_distance
@@ -766,56 +775,6 @@ impl Domain {
         result
     }
 
-    /// If this \ other is a singleton, returns it. Returns None otherwise.
-    ///
-    /// This is similar to checking if this.IntersectionWith(other.Complement()) is
-    /// non-empty and fixed, but avoid allocating memory.
-    pub fn unique_value_not_in(&self, other: &Domain) -> Option<i64> {
-        let mut result: Option<i64> = None;
-        let mut i = 0;
-        let to_exclude = &other.intervals;
-        for &ClosedInterval { mut start, end } in &self.intervals {
-            while start <= end {
-                // find the first interval with to_exclude[i].end >= start.
-                while i < to_exclude.len() && to_exclude[i].end < start {
-                    i += 1;
-                }
-                if i < to_exclude.len() {
-                    debug_assert!(to_exclude[i].end >= start);
-                    if to_exclude[i].start <= start {
-                        if to_exclude[i].end == i64::MAX {
-                            return result;
-                        }
-                        start = to_exclude[i].end + 1;
-                        continue;
-                    }
-                    // Notice that if end > start, there will be no overflow here.
-                    if end == start || to_exclude[i].start == start + 1 {
-                        if result.is_some() {
-                            return None;
-                        }
-                        result = Some(start);
-                        if to_exclude[i].end == i64::MAX {
-                            return result;
-                        }
-                        start = to_exclude[i].end + 1;
-                        continue;
-                    }
-                    return None;
-                } else if end == start {
-                    if result.is_some() {
-                        return None;
-                    }
-                    result = Some(start);
-                    break; // Next interval.
-                } else {
-                    return None;
-                }
-            }
-        }
-        result
-    }
-
     /// Returns the union of D and domain.
     #[must_use]
     pub fn union_with(&self, domain: &Domain) -> Domain {
@@ -827,7 +786,7 @@ impl Domain {
         // strictly smaller than the next element of `a`.
         let (mut i, mut j) = (0, 0);
         while i < a.len() && j < b.len() {
-            if b[j] < a[i] {
+            if b[j].start < a[i].start {
                 result.intervals.push(b[j]);
                 j += 1;
             } else {
@@ -909,8 +868,15 @@ impl Domain {
             return Domain::new_value(0);
         }
 
-        let abs_coeff = coeff.abs();
-        let size_if_non_trivial = if abs_coeff > 1 { self.size() } else { 0 };
+        // sorted_interval_list.cc:549: std::abs(kint64min) is kint64min, which an optimised
+        // build still treats as larger than 1.
+        let abs_coeff = coeff.wrapping_abs();
+        let abs_coeff_is_above_one = coeff.unsigned_abs() > 1;
+        let size_if_non_trivial = if abs_coeff_is_above_one {
+            self.size()
+        } else {
+            0
+        };
         if size_if_non_trivial > i64::from(K_DOMAIN_COMPLEXITY_LIMIT) {
             if let Some(exact) = exact {
                 *exact = false;
@@ -919,7 +885,7 @@ impl Domain {
         }
 
         let mut result = Domain::default();
-        if abs_coeff > 1 {
+        if abs_coeff_is_above_one {
             let max_value = i64::MAX / abs_coeff;
             let min_value = i64::MIN / abs_coeff;
             result.intervals.reserve(size_if_non_trivial as usize);
@@ -971,10 +937,11 @@ impl Domain {
     #[must_use]
     pub fn continuous_multiplication_by(&self, coeff: i64) -> Domain {
         let mut result = self.clone();
-        let abs_coeff = coeff.abs();
+        // sorted_interval_list.cc:583
+        let abs_coeff = coeff.wrapping_abs();
         for i in &mut result.intervals {
-            i.start = cap_prod(i.start, abs_coeff);
-            i.end = cap_prod(i.end, abs_coeff);
+            i.start = cap_prod_by_abs(i.start, abs_coeff);
+            i.end = cap_prod_by_abs(i.end, abs_coeff);
         }
         union_of_sorted_intervals(&mut result.intervals);
         if coeff < 0 {
@@ -1014,7 +981,8 @@ impl Domain {
     pub fn division_by(&self, coeff: i64) -> Domain {
         assert_ne!(coeff, 0);
         let mut result = self.clone();
-        let abs_coeff = coeff.abs();
+        // sorted_interval_list.cc:615
+        let abs_coeff = coeff.wrapping_abs();
         for i in &mut result.intervals {
             i.start /= abs_coeff;
             i.end /= abs_coeff;
@@ -1040,7 +1008,8 @@ impl Domain {
         }
         let mut result = self.clone();
         let mut new_size = 0;
-        let abs_coeff = coeff.abs();
+        // sorted_interval_list.cc:631
+        let abs_coeff = coeff.wrapping_abs();
         for index in 0..result.intervals.len() {
             let i = result.intervals[index];
             let start = ceil_ratio(i.start, abs_coeff);
@@ -1084,7 +1053,8 @@ impl Domain {
             return modulo_helper(self.min(), self.max(), modulo);
         }
         debug_assert!(self.max() < 0);
-        modulo_helper(-self.max(), -self.min(), modulo).negation()
+        // sorted_interval_list.cc:680: the negation wraps for kint64min.
+        modulo_helper(self.max().wrapping_neg(), self.min().wrapping_neg(), modulo).negation()
     }
 
     /// Returns a superset of:
@@ -1303,6 +1273,56 @@ impl Domain {
         result
     }
 
+    /// If this \ other is a singleton, returns it. Returns None otherwise.
+    ///
+    /// This is similar to checking if this.IntersectionWith(other.Complement()) is
+    /// non-empty and fixed, but avoid allocating memory.
+    pub fn unique_value_not_in(&self, other: &Domain) -> Option<i64> {
+        let mut result: Option<i64> = None;
+        let mut i = 0;
+        let to_exclude = &other.intervals;
+        for &ClosedInterval { mut start, end } in &self.intervals {
+            while start <= end {
+                // find the first interval with to_exclude[i].end >= start.
+                while i < to_exclude.len() && to_exclude[i].end < start {
+                    i += 1;
+                }
+                if i < to_exclude.len() {
+                    debug_assert!(to_exclude[i].end >= start);
+                    if to_exclude[i].start <= start {
+                        if to_exclude[i].end == i64::MAX {
+                            return result;
+                        }
+                        start = to_exclude[i].end + 1;
+                        continue;
+                    }
+                    // Notice that if end > start, there will be no overflow here.
+                    if end == start || to_exclude[i].start == start + 1 {
+                        if result.is_some() {
+                            return None;
+                        }
+                        result = Some(start);
+                        if to_exclude[i].end == i64::MAX {
+                            return result;
+                        }
+                        start = to_exclude[i].end + 1;
+                        continue;
+                    }
+                    return None;
+                } else if end == start {
+                    if result.is_some() {
+                        return None;
+                    }
+                    result = Some(start);
+                    break; // Next interval.
+                } else {
+                    return None;
+                }
+            }
+        }
+        result
+    }
+
     /// Basic read-only std::vector<> wrapping to view a Domain as a sorted list of
     /// non-adjacent intervals. Note that we don't expose size() which might be
     /// confused with the number of values in the domain.
@@ -1403,12 +1423,15 @@ fn modulo_helper(min: i64, max: i64, modulo: &Domain) -> Domain {
     // The min/max are exact if the modulo is fixed. Note that we could return the
     // exact domain with a potential hole but we currently don't.
     if modulo.min() == modulo.max() {
-        let size = max - min;
-        let v1 = min % modulo.max();
-        if v1 + size > max_mod {
+        // sorted_interval_list.cc:658-661: `max` is kint64min when the caller negated
+        // kint64min, so the subtraction and the sum wrap. An optimised build takes `min` as
+        // positive, so the remainder is unsigned.
+        let size = max.wrapping_sub(min);
+        let v1 = (min as u64 % modulo.max() as u64) as i64;
+        if v1.wrapping_add(size) > max_mod {
             return Domain::new(0, max_mod);
         }
-        return Domain::new(v1, v1 + size);
+        return Domain::new(v1, v1.wrapping_add(size));
     }
 
     // TODO(user): This is a superset.
@@ -1458,7 +1481,8 @@ fn evaluate_quadratic_prod_interval(
         max_var = max_var.max(point1);
     }
 
-    let point2_x = point_at_minimum_64 + rounder;
+    // sorted_interval_list.cc:787: wraps when the point is kint64max.
+    let point2_x = point_at_minimum_64.wrapping_add(rounder);
     if point2_x >= variable_min && point2_x <= variable_max {
         let point2 = evaluate(point2_x);
         min_var = min_var.min(point2);
@@ -1477,13 +1501,15 @@ pub fn sum_of_k_min_value_in_domain(domain: &Domain, k: i32) -> i64 {
             break;
         }
         // Upstream narrows the bound to an `int` here (sorted_interval_list.cc:914).
-        let mut v = interval.start as i32;
-        while i64::from(v) <= interval.end {
+        // The counter is an i64: an optimised build does not wrap at i32::MAX, and the loop
+        // goes on up to the interval end.
+        let mut v = i64::from(interval.start as i32);
+        while v <= interval.end {
             if current_index >= k {
                 break;
             }
             current_index += 1;
-            current_sum += i64::from(v);
+            current_sum += v;
             v += 1;
         }
     }
@@ -1755,7 +1781,7 @@ impl<'a> IntoIterator for &'a SortedDisjointIntervalList {
 
 #[cfg(test)]
 mod tests {
-    use cpsat_testutil::expect_debug_death;
+    use cpsat_testutil::{expect_death, expect_debug_death};
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::{RngCore, SeedableRng};
 
@@ -1870,7 +1896,7 @@ mod tests {
         // Arrange
         // Act
         // Assert
-        assert!(ClosedInterval::new(1, 0) < ClosedInterval::new(3, 2));
+        assert!(ClosedInterval::new(1, 0).less_than(&ClosedInterval::new(3, 2)));
         assert!(!intervals_are_sorted_and_non_adjacent(&intervals(&[(
             1, 0
         )])));
@@ -3818,6 +3844,234 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    // The cases below are not in the upstream test file. The expected values are what the
+    // optimised reference build returns for each input.
+
+    #[test]
+    fn smallest_value_compares_exact_magnitudes_at_i64_min() {
+        // Arrange
+        let cases = [
+            (vec![i64::MIN, -5], -5),
+            (vec![i64::MIN, -1], -1),
+            (vec![i64::MIN, i64::MIN], i64::MIN),
+            (vec![i64::MIN, -7, -3, -2], -2),
+            (vec![i64::MIN, -7, 3, 9], 3),
+            (vec![i64::MIN, -7, 7, 9], 7),
+        ];
+        for (flat_intervals, expected) in cases {
+            let domain = Domain::from_flat_intervals(&flat_intervals);
+
+            // Act
+            let value = domain.smallest_value();
+
+            // Assert
+            assert_eq!(expected, value, "domain: {domain}");
+        }
+    }
+
+    #[test]
+    fn distance_wraps_on_overflow() {
+        // Arrange
+        let cases = [
+            (Domain::new_value(0), i64::MIN, i64::MIN),
+            (Domain::new_value(i64::MIN), i64::MAX, -1),
+            (Domain::new_value(i64::MIN), 0, i64::MIN),
+            (Domain::new_value(i64::MAX), i64::MIN, -1),
+            (Domain::new_value(-1), i64::MAX, i64::MIN),
+            (Domain::new_value(1), i64::MIN, i64::MIN + 1),
+            (Domain::new_value(i64::MAX), -1, i64::MIN),
+            (Domain::new(i64::MIN, 5), i64::MAX, i64::MAX - 5),
+            (Domain::new(i64::MIN, i64::MIN), i64::MAX, -1),
+        ];
+        for (domain, value, expected) in cases {
+            // Act
+            let distance = domain.distance(value);
+
+            // Assert
+            assert_eq!(expected, distance, "domain: {domain}, value: {value}");
+        }
+    }
+
+    #[test]
+    fn multiplication_by_i64_min_drops_every_overflowing_value() {
+        // Arrange
+        let cases = [
+            (Domain::new(1, 3), "[]"),
+            (Domain::new(i64::MIN, i64::MIN), "[]"),
+            (Domain::new_value(0), "[]"),
+            (Domain::new(-1, 1), "[]"),
+            (Domain::new(0, 5000), "[-9223372036854775807,0]"),
+            (
+                Domain::new(i64::MIN, i64::MAX),
+                "[-9223372036854775807,9223372036854775807]",
+            ),
+        ];
+        for (domain, expected) in cases {
+            // Act
+            let product = domain.multiplication_by(i64::MIN, None);
+
+            // Assert
+            assert_eq!(expected, product.to_string(), "domain: {domain}");
+        }
+    }
+
+    #[test]
+    fn continuous_multiplication_by_i64_min_caps_by_the_sign_of_the_value() {
+        // Arrange
+        let cases = [
+            (
+                Domain::new(1, 3),
+                "[-9223372036854775807,9223372036854775807]",
+            ),
+            (
+                Domain::new(-3, 3),
+                "[-9223372036854775807,9223372036854775807]",
+            ),
+            (Domain::new(i64::MIN, i64::MIN), "[]"),
+            (Domain::new(0, 5000), "[-9223372036854775807,0]"),
+            (Domain::new(-5000, 0), "[0,9223372036854775807]"),
+            (Domain::new(-5000, -1), "[]"),
+            (Domain::new_value(-1), "[]"),
+            (Domain::new_value(1), "[]"),
+            (Domain::new_value(0), "[0]"),
+            (Domain::new_value(2), "[-9223372036854775807]"),
+            (Domain::new_value(-2), "[]"),
+        ];
+        for (domain, expected) in cases {
+            // Act
+            let product = domain.continuous_multiplication_by(i64::MIN);
+
+            // Assert
+            assert_eq!(expected, product.to_string(), "domain: {domain}");
+        }
+    }
+
+    #[test]
+    fn division_by_i64_min_divides_by_the_wrapped_absolute_value() {
+        // Arrange
+        let cases = [
+            (Domain::new(5, 7), "[0]"),
+            (Domain::new(i64::MIN, i64::MIN), "[-1]"),
+            (Domain::new(-5, -3), "[0]"),
+        ];
+        for (domain, expected) in cases {
+            // Act
+            let quotient = domain.division_by(i64::MIN);
+
+            // Assert
+            assert_eq!(expected, quotient.to_string(), "domain: {domain}");
+        }
+    }
+
+    #[test]
+    fn inverse_multiplication_by_i64_min_divides_by_the_wrapped_absolute_value() {
+        // Arrange
+        let cases = [
+            (Domain::new(i64::MIN, i64::MAX), "[]"),
+            (Domain::new(i64::MIN, i64::MIN), "[-1]"),
+            (Domain::new(-5, 7), "[0]"),
+            (Domain::new(i64::MAX, i64::MAX), "[]"),
+            (Domain::new(i64::MIN, -1), "[]"),
+        ];
+        for (domain, expected) in cases {
+            // A debug build stops at the check on the positive coefficient, as upstream does.
+            if cfg!(debug_assertions) {
+                expect_death(
+                    || {
+                        let _ = domain.inverse_multiplication_by(i64::MIN);
+                    },
+                    "positive_coeff > 0",
+                );
+                continue;
+            }
+
+            // Act
+            let quotient = domain.inverse_multiplication_by(i64::MIN);
+
+            // Assert
+            assert_eq!(expected, quotient.to_string(), "domain: {domain}");
+        }
+    }
+
+    #[test]
+    fn positive_modulo_by_superset_wraps_the_negation_of_i64_min() {
+        // Arrange
+        let cases = [
+            (Domain::new(i64::MIN, -1), Domain::new_value(5), "[]"),
+            (Domain::new(i64::MIN, -1), Domain::new_value(1), "[0]"),
+            (Domain::new(i64::MIN, -1), Domain::new_value(i64::MAX), "[]"),
+            (Domain::new(i64::MIN, -1), Domain::new(2, 9), "[]"),
+            (Domain::new(i64::MIN, -5), Domain::new_value(7), "[]"),
+            (
+                Domain::new(i64::MIN + 1, -1),
+                Domain::new_value(7),
+                "[-6,0]",
+            ),
+        ];
+        for (domain, modulo, expected) in cases {
+            // Act
+            let remainders = domain.positive_modulo_by_superset(&modulo);
+
+            // Assert
+            assert_eq!(
+                expected,
+                remainders.to_string(),
+                "domain: {domain}, modulo: {modulo}"
+            );
+        }
+    }
+
+    #[test]
+    fn positive_modulo_by_superset_of_i64_min_takes_the_remainder_as_unsigned() {
+        // Arrange
+        let cases = [(Domain::new_value(5), "[-3]"), (Domain::new(2, 9), "[]")];
+        let domain = Domain::new(i64::MIN, i64::MIN);
+        for (modulo, expected) in cases {
+            // A debug build stops at the check that the minimum is positive, as upstream does.
+            if cfg!(debug_assertions) {
+                expect_death(
+                    || {
+                        let _ = domain.positive_modulo_by_superset(&modulo);
+                    },
+                    "min > 0",
+                );
+                continue;
+            }
+
+            // Act
+            let remainders = domain.positive_modulo_by_superset(&modulo);
+
+            // Assert
+            assert_eq!(expected, remainders.to_string(), "modulo: {modulo}");
+        }
+    }
+
+    #[test]
+    fn quadratic_superset_wraps_the_point_after_the_parabola_minimum() {
+        // Arrange
+        let domain = Domain::new(i64::MIN, i64::MIN + 5000);
+
+        // Act
+        let result = domain.quadratic_superset(1, i64::MIN + 1, 1, i64::MIN);
+
+        // Assert
+        assert_eq!("[9223372036854775807]", result.to_string());
+    }
+
+    #[test]
+    fn sum_of_k_min_value_in_domain_goes_past_i32_max_without_wrapping() {
+        // Arrange
+        let domain = Domain::new(2_147_483_645, 2_147_483_655);
+        let cases = [(3, 6_442_450_938), (4, 8_589_934_586), (8, 17_179_869_188)];
+        for (k, expected) in cases {
+            // Act
+            let sum = sum_of_k_min_value_in_domain(&domain, k);
+
+            // Assert
+            assert_eq!(expected, sum, "k: {k}");
         }
     }
 }
