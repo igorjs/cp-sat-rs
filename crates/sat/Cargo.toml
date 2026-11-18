@@ -18,6 +18,10 @@ log.workspace = true
 prost.workspace = true
 rand_chacha.workspace = true
 
+[features]
+test-utils = []
+
 [dev-dependencies]
+cpsat-sat = { path = ".", features = ["test-utils"] }
 cpsat-testutil = { path = "../testutil" }
 prost-reflect.workspace = true
