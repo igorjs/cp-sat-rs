@@ -1,0 +1,7 @@
+phase = 0
+
+[[file]]
+upstream = "sat/model_test.cc"
+rust = "src/lib.rs"
+binary = "fx"
+upstream_cases = 1

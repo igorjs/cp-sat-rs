@@ -242,7 +242,7 @@ reason = "why upstream has no such case"
 
 ## 15. Test names
 
-The unit test of a file lives in its module as `#[cfg(test)] mod tests`, in upstream order. `TEST(Suite, Name)`, `TEST_F(Suite, Name)` and `TEST_P(Suite, Name)` become `fn suite_name` in `snake_case`. A run of capital letters stays one word: `CPModel` is `cp_model`. `cargo xtask port-map --check --upstream` matches the names, so a renamed test fails CI.
+The unit test of a file lives in its module as `#[cfg(test)] mod tests`, in upstream order. `TEST(Suite, Name)`, `TEST_F(Suite, Name)` and `TEST_P(Suite, Name)` become `fn suite_name` in `snake_case`. A run of capital letters stays one word: `CPModel` is `cp_model`. `cargo xtask port-map --check --upstream` matches the names, so a renamed test fails CI. A test that a macro of the test file makes counts once per use and takes the `TEST_F(Suite, Name)` header inside the macro with the arguments of the use put in: `TEST_BINARY_OPERATOR(CapAdd, "+", ReferenceCapAdd)` at `util/saturated_arithmetic_test.cc:153` makes `TEST_F(SaturatedArithmeticTest, CapAdd)`, so its Rust name is `saturated_arithmetic_test_cap_add`.
 
 ```cpp
 TEST(ClosedIntervalConstructorTest, DFatalInNonOptIfStartGreaterThanEnd) {   // util/sorted_interval_list_test.cc:43

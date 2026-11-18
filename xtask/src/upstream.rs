@@ -34,16 +34,42 @@ pub struct Case {
     pub name: String,
 }
 
+/// Every case of a test file, in file order. A use of a macro that the file defines around
+/// a test is one case, named by the macro's test header with the use's arguments put in.
 #[derive(Debug, Default)]
 pub struct Cases {
     pub written: Vec<Case>,
-    /// Uses of a macro that defines a test around its arguments.
-    pub macro_uses: usize,
 }
 
 impl Cases {
     pub fn total(&self) -> usize {
-        self.written.len() + self.macro_uses
+        self.written.len()
+    }
+}
+
+/// The test header inside a macro the test file defines, with the macro's parameters.
+#[derive(Debug)]
+struct Wrapper {
+    parameters: Vec<String>,
+    macro_name: &'static str,
+    suite: String,
+    name: String,
+}
+
+impl Wrapper {
+    fn case_for(&self, arguments: &[String]) -> Case {
+        let put_in = |token: &str| {
+            self.parameters
+                .iter()
+                .position(|parameter| parameter == token)
+                .and_then(|at| arguments.get(at))
+                .map_or_else(|| token.to_string(), Clone::clone)
+        };
+        Case {
+            macro_name: self.macro_name,
+            suite: put_in(&self.suite),
+            name: put_in(&self.name),
+        }
     }
 }
 
@@ -139,6 +165,64 @@ fn is_word_char(character: char) -> bool {
     character.is_ascii_alphanumeric() || character == '_'
 }
 
+/// The text of a call up to its closing parenthesis, given the text after the opening one.
+/// `None` when the call goes on past the end of the text.
+fn call_arguments(after_open: &str) -> Option<&str> {
+    let (mut depth, mut quoted) = (1_usize, false);
+    for (at, character) in after_open.char_indices() {
+        match character {
+            '"' => quoted = !quoted,
+            '(' if !quoted => depth += 1,
+            ')' if !quoted => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(&after_open[..at]);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The arguments of a call that starts at `lines[0]`, which may go on over later lines.
+fn call_arguments_over_lines(after_open: &str, later: &[&str]) -> Vec<String> {
+    let mut text = after_open.to_string();
+    let mut rest = later.iter();
+    loop {
+        if let Some(inside) = call_arguments(&text) {
+            return split_arguments(inside);
+        }
+        match rest.next() {
+            Some(line) => {
+                text.push(' ');
+                text.push_str(line.trim());
+            }
+            None => return split_arguments(&text),
+        }
+    }
+}
+
+/// Splits on the commas outside parentheses and quotes.
+fn split_arguments(text: &str) -> Vec<String> {
+    let mut arguments = Vec::new();
+    let (mut depth, mut quoted, mut start) = (0_usize, false, 0);
+    for (at, character) in text.char_indices() {
+        match character {
+            '"' => quoted = !quoted,
+            '(' if !quoted => depth += 1,
+            ')' if !quoted => depth = depth.saturating_sub(1),
+            ',' if !quoted && depth == 0 => {
+                arguments.push(text[start..at].trim().to_string());
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    arguments.push(text[start..].trim().to_string());
+    arguments
+}
+
 fn test_macro_at_start(line: &str) -> Option<(&'static str, &str)> {
     TEST_MACROS.iter().find_map(|name| {
         line.strip_prefix(name)
@@ -147,74 +231,100 @@ fn test_macro_at_start(line: &str) -> Option<(&'static str, &str)> {
     })
 }
 
-fn invokes_test_macro(line: &str) -> bool {
-    TEST_MACROS.iter().any(|name| {
+/// The first test macro call in `text` that is not the tail of a longer name.
+fn find_test_call(text: &str) -> Option<(&'static str, &str)> {
+    let mut found: Option<(usize, &'static str)> = None;
+    for name in TEST_MACROS {
         let call = format!("{name}(");
-        line.match_indices(&call).any(|(at, _)| {
-            line[..at]
+        let at = text.match_indices(&call).map(|(at, _)| at).find(|&at| {
+            text[..at]
                 .chars()
                 .next_back()
                 .is_none_or(|before| !is_word_char(before))
-        })
-    })
+        });
+        if let Some(at) = at
+            && found.is_none_or(|(best, _)| at < best)
+        {
+            found = Some((at, name));
+        }
+    }
+    let (at, name) = found?;
+    Some((name, &text[at + name.len() + 1..]))
 }
 
-fn macro_name(define_line: &str) -> Option<&str> {
-    let rest = define_line.trim().strip_prefix(DEFINE_PREFIX)?.trim_start();
-    let end = rest.find(|character: char| !is_word_char(character))?;
-    (rest[end..].starts_with('(') && end > 0).then(|| &rest[..end])
+/// Reads a `#define NAME(parameters) body` that makes a test: `None` for any other define.
+fn parse_wrapper(define: &str) -> Option<(String, Wrapper)> {
+    let rest = define.trim().strip_prefix(DEFINE_PREFIX)?.trim_start();
+    let name_end = rest.find(|character: char| !is_word_char(character))?;
+    let after_name = rest[name_end..].strip_prefix('(')?;
+    let parameters = call_arguments(after_name)?;
+    let body = &after_name[parameters.len() + 1..];
+    let (macro_name, after_open) = find_test_call(body)?;
+    let mut header = split_arguments(call_arguments(after_open)?).into_iter();
+    Some((
+        rest[..name_end].to_string(),
+        Wrapper {
+            parameters: split_arguments(parameters),
+            macro_name,
+            suite: header.next().unwrap_or_default(),
+            name: header.next().unwrap_or_default(),
+        },
+    ))
 }
 
-/// Splits the file into the lines outside `#define` bodies and the names of the macros
-/// whose body makes a test.
-fn split_defines(text: &str) -> (Vec<&str>, BTreeSet<String>) {
+/// Splits the file into the lines outside `#define` bodies and the macros whose body
+/// makes a test.
+fn split_defines(text: &str) -> (Vec<&str>, BTreeMap<String, Wrapper>) {
     let mut outside = Vec::new();
-    let mut wrappers = BTreeSet::new();
-    let mut open: Option<(Option<&str>, bool)> = None;
-    for line in text.lines() {
-        let (name, mut makes_test) = match open.take() {
-            Some(state) => state,
-            None if line.trim().starts_with(DEFINE_PREFIX) => (macro_name(line), false),
-            None => {
-                outside.push(line);
-                continue;
-            }
-        };
-        makes_test |= invokes_test_macro(line);
-        if line.trim_end().ends_with(LINE_CONTINUATION) {
-            open = Some((name, makes_test));
-        } else if let (Some(name), true) = (name, makes_test) {
-            wrappers.insert(name.to_string());
+    let mut wrappers = BTreeMap::new();
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        if !line.trim().starts_with(DEFINE_PREFIX) {
+            outside.push(line);
+            continue;
+        }
+        let mut define = vec![line];
+        while define
+            .last()
+            .is_some_and(|last| last.trim_end().ends_with(LINE_CONTINUATION))
+        {
+            let Some(next) = lines.next() else { break };
+            define.push(next);
+        }
+        let joined = define
+            .iter()
+            .map(|part| part.trim().trim_end_matches(LINE_CONTINUATION))
+            .collect::<Vec<_>>()
+            .join(" ");
+        if let Some((name, wrapper)) = parse_wrapper(&joined) {
+            wrappers.insert(name, wrapper);
         }
     }
     (outside, wrappers)
 }
 
-fn parse_case(macro_name: &'static str, arguments: &str) -> Case {
-    let inside = arguments.split(')').next().unwrap_or_default();
-    let mut parts = inside.split(',').map(|part| part.trim().to_string());
-    Case {
-        macro_name,
-        suite: parts.next().unwrap_or_default(),
-        name: parts.next().unwrap_or_default(),
-    }
-}
-
 /// Counts the test cases of one upstream test file: the `TEST`, `TEST_F`, `TEST_P` and
 /// `TYPED_TEST` lines outside `#define` bodies, and one case for each use of a macro
-/// that defines a test around its arguments.
+/// that defines a test around its arguments. A header or a use may span several lines.
 pub fn count_cases(text: &str) -> Cases {
     let (outside, wrappers) = split_defines(text);
     let mut cases = Cases::default();
-    for line in outside {
+    for (at, line) in outside.iter().enumerate() {
         let line = line.trim();
-        if let Some((macro_name, arguments)) = test_macro_at_start(line) {
-            cases.written.push(parse_case(macro_name, arguments));
-        } else if wrappers.iter().any(|name| {
-            line.strip_prefix(name.as_str())
-                .is_some_and(|rest| rest.starts_with('('))
+        let later = &outside[at + 1..];
+        if let Some((macro_name, after_open)) = test_macro_at_start(line) {
+            let mut arguments = call_arguments_over_lines(after_open, later).into_iter();
+            cases.written.push(Case {
+                macro_name,
+                suite: arguments.next().unwrap_or_default(),
+                name: arguments.next().unwrap_or_default(),
+            });
+        } else if let Some((wrapper, after_open)) = wrappers.iter().find_map(|(name, wrapper)| {
+            let after_open = line.strip_prefix(name.as_str())?.strip_prefix('(')?;
+            Some((wrapper, after_open))
         }) {
-            cases.macro_uses += 1;
+            let arguments = call_arguments_over_lines(after_open, later);
+            cases.written.push(wrapper.case_for(&arguments));
         }
     }
     cases

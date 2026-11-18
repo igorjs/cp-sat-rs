@@ -7,6 +7,10 @@
 set -euo pipefail
 
 readonly STUB_MESSAGE_PREFIX="not implemented: phase"
+# Cargo puts ANSI codes in front of "Running" when it colours its output, which the parser
+# below cannot read, so every cargo command runs with colour off.
+readonly CARGO_COLOUR=never
+readonly CARGO_JOBS=4
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
@@ -14,7 +18,8 @@ trap 'rm -rf "$work_dir"' EXIT
 # Reads cargo output on stdin. The "Running" lines of cargo name the test binary, so two
 # binaries may hold tests with the same name. Prints one "<binary>/<test>" per listed
 # test (mode "list"), or one "<binary>/<test><TAB><result><TAB><message>" per test that
-# ran (mode "run"). Doc tests are left out.
+# ran (mode "run"). Doc tests are left out. Fails when a test line follows no recognised
+# "Running" line, so that a parse miss never reads as "no tests".
 parse_cargo_output() {
   awk -v mode="$1" '
     function binary_name(line,    path, n, parts) {
@@ -25,8 +30,12 @@ parse_cargo_output() {
       sub(/-[0-9a-f]+$/, "", path)
       return path
     }
-    /^ +Running / { binary = binary_name($0); test = ""; next }
-    /^ +Doc-tests / { binary = ""; test = ""; next }
+    /^ +Running / { binary = binary_name($0); doc_tests = 0; test = ""; next }
+    /^ +Doc-tests / { binary = ""; doc_tests = 1; test = ""; next }
+    binary == "" && !doc_tests && (mode == "list" && /: test$/ || mode == "run" && /^test .* \.\.\. /) {
+      unrecognised++
+      next
+    }
     binary == "" { next }
     mode == "list" && /: test$/ {
       name = $0
@@ -59,6 +68,10 @@ parse_cargo_output() {
       next
     }
     END {
+      if (unrecognised > 0) {
+        print "check-red: " unrecognised " test lines follow no test binary that the parser recognises" > "/dev/stderr"
+        exit 1
+      }
       if (mode == "run") {
         for (i = 1; i <= count; i++) {
           key = order[i]
@@ -69,11 +82,17 @@ parse_cargo_output() {
   '
 }
 
-cargo test --workspace -- --ignored --list 2>&1 | parse_cargo_output list | sort >"$work_dir/listed"
+if ! CARGO_TERM_COLOR="$CARGO_COLOUR" cargo test --workspace -j "$CARGO_JOBS" -- --ignored --list >"$work_dir/list.out" 2>&1; then
+  cat "$work_dir/list.out" >&2
+  echo "check-red: cargo could not list the ignored tests" >&2
+  exit 1
+fi
+parse_cargo_output list <"$work_dir/list.out" | sort >"$work_dir/listed"
 
 # Cargo exits non-zero when a test fails, which is the expected outcome here. A build
 # error shows up as listed tests that did not run.
-cargo test --workspace --no-fail-fast -- --ignored 2>&1 | parse_cargo_output run >"$work_dir/ran" || true
+CARGO_TERM_COLOR="$CARGO_COLOUR" cargo test --workspace --no-fail-fast -j "$CARGO_JOBS" -- --ignored >"$work_dir/run.out" 2>&1 || true
+parse_cargo_output run <"$work_dir/run.out" >"$work_dir/ran"
 
 failures=0
 total=0

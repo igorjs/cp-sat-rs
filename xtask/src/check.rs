@@ -27,6 +27,7 @@ pub fn run(options: &CheckOptions) -> Result<Vec<String>, String> {
     let tree = rust_tree::scan(&options.root)?;
 
     let mut problems = check_reasons(&baseline, &tree);
+    problems.extend(check_listed(&baseline, &tree));
     eprintln!(
         "port-map: checking the counts of {} ported files",
         baseline.file.len()
@@ -110,6 +111,17 @@ fn check_reasons(baseline: &Baseline, tree: &RustTree) -> Vec<String> {
     problems
 }
 
+/// A ported file that holds tests or pending lines needs an entry in the baseline.
+fn check_listed(baseline: &Baseline, tree: &RustTree) -> Vec<String> {
+    tree.test_holders
+        .iter()
+        .filter(|file| !baseline.file.iter().any(|entry| &entry.rust == *file))
+        .map(|file| {
+            format!("{file}: ported file has tests or pending lines but no `[[file]]` entry in {BASELINE_FILE}")
+        })
+        .collect()
+}
+
 fn check_counts(
     entry: &FileEntry,
     lists: &TestLists,
@@ -121,16 +133,15 @@ fn check_counts(
     let pending = pending_of(entry, tree).len();
     let other = other_profile_cases(entry, release);
     let expected = (entry.upstream_cases + entry.typed_additions + entry.added.len())
-        .saturating_sub(other + entry.pending);
+        .saturating_sub(other + pending);
     if found != expected {
         problems.push(format!(
             "{}: found {found} tests, expected {expected} ({} upstream cases, {} typed additions, \
-             {} added tests, less {other} for the other profile and {} pending)",
+             {} added tests, less {other} for the other profile and {pending} pending)",
             entry.rust,
             entry.upstream_cases,
             entry.typed_additions,
             entry.added.len(),
-            entry.pending,
         ));
     }
     for added in entry
@@ -277,6 +288,18 @@ fn check_base(baseline: &Baseline, root: &Path, base: &str) -> Result<Vec<String
         return Ok(Vec::new());
     };
     let mut problems = Vec::new();
+    for old in &before.file {
+        if !baseline
+            .file
+            .iter()
+            .any(|entry| entry.upstream == old.upstream)
+        {
+            problems.push(format!(
+                "{}: the entry exists on the base and is missing now",
+                old.upstream
+            ));
+        }
+    }
     for entry in &baseline.file {
         let Some(old) = before
             .file

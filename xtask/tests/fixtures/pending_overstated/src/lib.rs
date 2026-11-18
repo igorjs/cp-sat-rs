@@ -1,0 +1,10 @@
+pub mod model {
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn one() {}
+
+        #[test]
+        fn two() {}
+    }
+}

@@ -9,6 +9,10 @@ use std::process::Command;
 const TEST_LINE_SUFFIX: &str = ": test";
 const RUNNING_PREFIX: &str = "Running ";
 const DOC_TESTS_PREFIX: &str = "Doc-tests ";
+/// Cargo puts ANSI codes in front of `Running` when it colours its output, which the
+/// parser cannot read, so the commands run with colour off.
+const COLOUR_VAR: &str = "CARGO_TERM_COLOR";
+const COLOUR_OFF: &str = "never";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListedTest {
@@ -40,7 +44,10 @@ pub fn list(root: &Path, release: bool) -> Result<TestLists, String> {
 fn run_list(root: &Path, release: bool, ignored: bool) -> Result<Vec<ListedTest>, String> {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
     let mut command = Command::new(cargo);
-    command.current_dir(root).args(["test", "--workspace"]);
+    command
+        .current_dir(root)
+        .env(COLOUR_VAR, COLOUR_OFF)
+        .args(["test", "--workspace"]);
     if release {
         command.arg("--release");
     }
@@ -72,7 +79,7 @@ fn run_list(root: &Path, release: bool, ignored: bool) -> Result<Vec<ListedTest>
     if !status.success() {
         return Err(format!("`cargo test -- --list` failed:\n{output}"));
     }
-    Ok(parse_list(&output))
+    parse_list(&output)
 }
 
 /// Takes the binary name from a line such as
@@ -86,22 +93,40 @@ fn binary_name(running_line: &str) -> Option<String> {
         .then(|| name.to_string())
 }
 
-/// Reads the merged output of `cargo test -- --list`. Doc tests are left out.
-pub fn parse_list(output: &str) -> Vec<ListedTest> {
-    let mut binary: Option<String> = None;
+/// Where the parser is in the output: before any `Running` line, in a test binary, or in
+/// the doc tests.
+enum Section {
+    None,
+    Binary(String),
+    DocTests,
+}
+
+/// Reads the merged output of `cargo test -- --list`. Doc tests are left out. A test line
+/// that follows no recognised `Running` line is an error: it means the output has a shape
+/// the parser does not know, and the tests would go uncounted.
+pub fn parse_list(output: &str) -> Result<Vec<ListedTest>, String> {
+    let mut section = Section::None;
     let mut tests = Vec::new();
     for line in output.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with(RUNNING_PREFIX) {
-            binary = binary_name(trimmed);
+            section = binary_name(trimmed).map_or(Section::None, Section::Binary);
         } else if trimmed.starts_with(DOC_TESTS_PREFIX) {
-            binary = None;
-        } else if let (Some(binary), Some(path)) = (&binary, line.strip_suffix(TEST_LINE_SUFFIX)) {
-            tests.push(ListedTest {
-                binary: binary.clone(),
-                path: path.to_string(),
-            });
+            section = Section::DocTests;
+        } else if let Some(path) = line.strip_suffix(TEST_LINE_SUFFIX) {
+            match &section {
+                Section::Binary(binary) => tests.push(ListedTest {
+                    binary: binary.clone(),
+                    path: path.to_string(),
+                }),
+                Section::DocTests => {}
+                Section::None => {
+                    return Err(format!(
+                        "cargo printed the test line `{line}` with no test binary recognised before it"
+                    ));
+                }
+            }
         }
     }
-    tests
+    Ok(tests)
 }

@@ -1,4 +1,7 @@
-use crate::support::{run_check_red, scratch_copy};
+use crate::support::{
+    ALWAYS_COLOUR, empty_scratch, run_check_red, run_check_red_with_env, scratch_copy,
+    scratch_copy_as, write_coloured_fake_cargo,
+};
 
 #[test]
 fn an_ignored_test_that_fails_an_assertion_fails_the_script_and_is_named() {
@@ -73,5 +76,46 @@ fn an_ignored_test_that_passes_fails_the_script() {
         outcome.all_output().contains("quietly_green"),
         "{}",
         outcome.all_output()
+    );
+}
+
+#[test]
+fn coloured_cargo_output_does_not_hide_the_ignored_tests() {
+    // Arrange
+    let root = scratch_copy_as("red_two_binaries", "red_colour");
+
+    // Act
+    let outcome = run_check_red_with_env(&root, &[("CARGO_TERM_COLOR", ALWAYS_COLOUR)]);
+
+    // Assert
+    assert!(outcome.success, "{}", outcome.all_output());
+    assert!(
+        outcome.stdout.contains("2 ignored tests"),
+        "{}",
+        outcome.stdout
+    );
+}
+
+#[test]
+fn test_lines_that_follow_no_recognised_binary_fail_the_script() {
+    // Arrange
+    let root = scratch_copy_as("red_none", "red_unrecognised");
+    let bin = empty_scratch("fake_cargo_red");
+    write_coloured_fake_cargo(&bin);
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").expect("PATH is set")
+    );
+
+    // Act
+    let outcome = run_check_red_with_env(&root, &[("PATH", &path)]);
+
+    // Assert
+    assert!(!outcome.success, "{}", outcome.all_output());
+    assert!(
+        outcome.stderr.contains("no test binary"),
+        "{}",
+        outcome.stderr
     );
 }
