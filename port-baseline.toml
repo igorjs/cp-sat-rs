@@ -514,7 +514,7 @@ rust = "crates/sat/src/cp_model_checker.rs"
 binary = "cpsat_sat"
 module = "cp_model_checker::tests"
 upstream_cases = 47
-ignored = 47
+ignored = 12
 
 # sat/util is ported in part: the Diophantine equation functions that sat/cp_model_checker calls,
 # with the modular functions they use. Each upstream case that needs another item is a pending line.
