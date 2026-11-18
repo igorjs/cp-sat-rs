@@ -91,3 +91,28 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - if: hashFiles('crates/*/Cargo.toml', 'xtask/Cargo.toml') != ''
         run: cargo llvm-cov --workspace --fail-under-lines "$(cat coverage-floor.txt)"
+
+  # Builds OR-Tools at the pinned commit. A pull request cannot read a cache
+  # another pull request saved, so this job also runs on main, whose cache every
+  # pull request can read.
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      REFERENCE_PREFIX: ${{ github.workspace }}/.reference
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: scripts/fetch-upstream.sh
+      - id: reference-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .reference
+          key: reference-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('upstream.lock', 'scripts/build-reference.sh') }}
+      - run: scripts/build-reference.sh
+      # Placed straight after the build, and run even when a later step fails,
+      # so one finished build is never built twice.
+      - if: always() && steps.reference-cache.outputs.cache-hit != 'true' && hashFiles('.reference/.reference-commit') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .reference
+          key: ${{ steps.reference-cache.outputs.cache-primary-key }}
