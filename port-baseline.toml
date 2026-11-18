@@ -254,3 +254,22 @@ upstream_cases = 0
 [[file.added]]
 name = "fasthash64_equals_the_hash_of_the_reference_for_every_case"
 reason = "upstream has no test for this file; compares fasthash64 with the C++ hash for 69 byte strings and seeds"
+
+[[file]]
+upstream = "sat/sat_literal_test.cc"
+rust = "crates/sat/src/sat_literal.rs"
+binary = "cpsat_sat"
+module = "sat_literal::tests"
+upstream_cases = 2
+
+[[file.added]]
+name = "signed_value_and_index_encodings_agree"
+reason = "checks the signed and index encodings, the negated index and the conversion to LiteralIndex"
+
+[[file.added]]
+name = "signed_value_of_zero_dies"
+reason = "checks the CHECK_NE of the signed value constructor"
+
+[[file.added]]
+name = "literals_order_by_index_and_print_with_a_sign"
+reason = "checks the order, the text of a literal, a span of literals and a span of indices, and the helper Literals"
