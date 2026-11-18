@@ -20,11 +20,6 @@
 //! `cap_prod_generic`) use bit tricks only. `cap_add`, `cap_sub` and `cap_prod` call the
 //! built-in versions, as upstream does under GCC and Clang.
 
-const KINT64MIN: i64 = i64::MIN;
-const KINT64MAX: i64 = i64::MAX;
-const KINT32MIN: i32 = i32::MIN;
-const KINT32MAX: i32 = i32::MAX;
-
 // Upstream calls `MostSignificantBitPosition64` of `util/bitset.h`, which is not ported yet.
 // This is its `kStd` form: the position of the highest set bit, and 0 for 0.
 fn most_significant_bit_position64(n: u64) -> i32 {
@@ -43,17 +38,17 @@ pub trait StrongInt64: Copy {
 
 /// Checks if x is equal to the min or the max value of an int64_t.
 pub fn at_min_or_max_int64(x: i64) -> bool {
-    x == KINT64MIN || x == KINT64MAX
+    x == i64::MIN || x == i64::MAX
 }
 
 // NOTE(user): -kint64min != kint64max, but kint64max == ~kint64min.
 pub fn cap_opp(v: i64) -> i64 {
-    if v == KINT64MIN { !v } else { -v }
+    if v == i64::MIN { !v } else { -v }
 }
 
 pub fn cap_abs(v: i64) -> i64 {
-    if v == KINT64MIN {
-        KINT64MAX
+    if v == i64::MIN {
+        i64::MAX
     } else if v < 0 {
         -v
     } else {
@@ -124,7 +119,7 @@ pub fn safe_add_into<T: StrongInt64>(a: T, b: &mut T) -> bool {
 /// Returns kint64max if x >= 0 and kint64min if x < 0.
 pub fn cap_with_sign_of(x: i64) -> i64 {
     // return kint64max if x >= 0 or kint64max + 1 (== kint64min) if x < 0.
-    twos_complement_addition(KINT64MAX, i64::from(x < 0))
+    twos_complement_addition(i64::MAX, i64::from(x < 0))
 }
 
 // Simple implementations using the overflow checks of the integer types, which compile well on
@@ -262,7 +257,7 @@ pub fn cap_prod(x: i64, y: i64) -> i64 {
 pub fn mul_into_overflow(x: i64, y: i64, result: &mut i64) -> bool {
     let (product, overflowed) = x.overflowing_mul(y);
     *result = product;
-    overflowed || *result == KINT64MIN
+    overflowed || *result == i64::MIN
 }
 
 impl CapOrFloatAdd for i64 {
@@ -274,10 +269,10 @@ impl CapOrFloatAdd for i64 {
 impl CapOrFloatAdd for i32 {
     fn cap_or_float_add(x: i32, y: i32) -> i32 {
         let sum = i64::from(x) + i64::from(y);
-        if sum > i64::from(KINT32MAX) {
-            KINT32MAX
-        } else if sum < i64::from(KINT32MIN) {
-            KINT32MIN
+        if sum > i64::from(i32::MAX) {
+            i32::MAX
+        } else if sum < i64::from(i32::MIN) {
+            i32::MIN
         } else {
             sum as i32
         }
@@ -341,40 +336,32 @@ mod tests {
     #[test]
     fn safe_add_test_basic_cases() {
         test_safe_add64(5, 42, /* error_expected */ false);
+        test_safe_add64(i64::MIN / 2, i64::MIN / 2, /* error_expected= */ false);
+        test_safe_add64(i64::MAX / 2, i64::MAX / 2, /* error_expected= */ false);
         test_safe_add64(
-            KINT64MIN / 2,
-            KINT64MIN / 2,
-            /* error_expected= */ false,
-        );
-        test_safe_add64(
-            KINT64MAX / 2,
-            KINT64MAX / 2,
-            /* error_expected= */ false,
-        );
-        test_safe_add64(
-            KINT64MIN / 2,
-            KINT64MIN / 2 - 2,
+            i64::MIN / 2,
+            i64::MIN / 2 - 2,
             /* error_expected= */ true,
         );
         test_safe_add64(
-            KINT64MAX / 2,
-            KINT64MAX / 2 + 2,
+            i64::MAX / 2,
+            i64::MAX / 2 + 2,
             /* error_expected= */ true,
         );
         test_safe_add64(
-            KINT64MIN / 2,
-            KINT64MIN / 2 - 1,
+            i64::MIN / 2,
+            i64::MIN / 2 - 1,
             /* error_expected= */ true,
         );
         test_safe_add64(
-            KINT64MAX / 2,
-            KINT64MAX / 2 + 1,
+            i64::MAX / 2,
+            i64::MAX / 2 + 1,
             /* error_expected= */ false,
         );
-        test_safe_add64(KINT64MIN, -1, /* error_expected= */ true);
-        test_safe_add64(KINT64MAX, 1, /* error_expected= */ true);
-        test_safe_add64(KINT64MIN, 1, /* error_expected= */ false);
-        test_safe_add64(KINT64MAX, -1, /* error_expected= */ false);
+        test_safe_add64(i64::MIN, -1, /* error_expected= */ true);
+        test_safe_add64(i64::MAX, 1, /* error_expected= */ true);
+        test_safe_add64(i64::MIN, 1, /* error_expected= */ false);
+        test_safe_add64(i64::MAX, -1, /* error_expected= */ false);
     }
 
     fn generate_int64_values_for_testing() -> Vec<i64> {
@@ -382,10 +369,10 @@ mod tests {
         // Generate a bunch of special values...
         for base in [
             0,
-            KINT64MIN,
-            KINT64MAX,
-            i64::from(KINT32MAX),
-            i64::from(KINT32MIN),
+            i64::MIN,
+            i64::MAX,
+            i64::from(i32::MAX),
+            i64::from(i32::MIN),
         ] {
             // ...scaled by various factor...
             for scaled in [base, base / 2, base / 3 * 2] {
@@ -408,7 +395,7 @@ mod tests {
     // Upstream builds the reference results from hand made 128 bit helpers, since it has no
     // signed 128 bit type there. Rust has `i128`, so the reference clamps an `i128` result.
     fn int128_to_capped64(x: i128) -> i64 {
-        x.clamp(i128::from(KINT64MIN), i128::from(KINT64MAX)) as i64
+        x.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
     }
 
     // Reference (safe, but slow) versions of the functions whose behavior we are testing.
@@ -519,8 +506,8 @@ mod tests {
 
     #[test]
     fn saturated_arithmetic_test_cap_abs() {
-        assert_eq!(cap_abs(KINT64MIN), KINT64MAX);
-        assert_eq!(cap_abs(KINT64MAX), KINT64MAX);
+        assert_eq!(cap_abs(i64::MIN), i64::MAX);
+        assert_eq!(cap_abs(i64::MAX), i64::MAX);
         assert_eq!(cap_abs(-100), 100);
         assert_eq!(cap_abs(0), 0);
         assert_eq!(cap_abs(200), 200);
@@ -573,12 +560,12 @@ mod tests {
         for extra in [
             -7,
             7,
-            KINT64MAX / 7,
-            -(KINT64MAX / 7),
-            KINT64MAX / 7 + 1,
-            -(KINT64MAX / 7 + 1),
-            KINT64MAX / 7 - 1,
-            -(KINT64MAX / 7 - 1),
+            i64::MAX / 7,
+            -(i64::MAX / 7),
+            i64::MAX / 7 + 1,
+            -(i64::MAX / 7 + 1),
+            i64::MAX / 7 - 1,
+            -(i64::MAX / 7 - 1),
             3_i64 << 60,
             -(3_i64 << 60),
             3_i64 << 61,
@@ -595,20 +582,19 @@ mod tests {
             for &b in &values {
                 let exact = i128::from(a) * i128::from(b);
                 let expected_overflow =
-                    exact <= i128::from(KINT64MIN) || exact > i128::from(KINT64MAX);
+                    exact <= i128::from(i64::MIN) || exact > i128::from(i64::MAX);
 
                 let mut result = 0;
                 let overflow = mul_into_overflow(a, b, &mut result);
                 assert_eq!(overflow, expected_overflow, "{a} * {b}");
                 if !overflow {
-                    assert_ne!(result, KINT64MIN, "{a} * {b}");
+                    assert_ne!(result, i64::MIN, "{a} * {b}");
                     assert_eq!(result, exact as i64, "{a} * {b}");
                 }
 
                 // Also verify the cap_prod-based fallback used without builtins.
                 let prod = cap_prod(a, b);
-                let fallback_overflow =
-                    prod == KINT64MIN || (prod == KINT64MAX && KINT64MAX / a != b);
+                let fallback_overflow = prod == i64::MIN || (prod == i64::MAX && i64::MAX / a != b);
                 assert_eq!(fallback_overflow, expected_overflow, "{a} * {b}");
                 if !fallback_overflow {
                     assert_eq!(prod, exact as i64, "{a} * {b}");
@@ -622,8 +608,8 @@ mod tests {
         const K_INF: f64 = f32::INFINITY as f64;
         assert_eq!(cap_or_float_add(0.5, 0.25), 0.75);
         assert_eq!(cap_or_float_add(K_INF, 0.25), K_INF);
-        assert_eq!(cap_or_float_add(1_i64, KINT64MAX), KINT64MAX);
-        assert_eq!(cap_or_float_add(4, KINT32MAX - 2), KINT32MAX);
+        assert_eq!(cap_or_float_add(1_i64, i64::MAX), i64::MAX);
+        assert_eq!(cap_or_float_add(4, i32::MAX - 2), i32::MAX);
 
         // A corner case: float isn't accurate enough to represent 1+1e-10, which we
         // use to verify that the return type is the same as the argument type.
@@ -636,7 +622,7 @@ mod tests {
     fn cap_functions_equal_the_clamped_i128_result() {
         // Arrange
         let mut random = ChaCha8Rng::seed_from_u64(12345);
-        let special = [KINT64MIN, KINT64MAX, 0, 1, -1];
+        let special = [i64::MIN, i64::MAX, 0, 1, -1];
         let mut pairs: Vec<(i64, i64)> = Vec::new();
         for &a in &special {
             for &b in &special {
