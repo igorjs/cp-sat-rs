@@ -14,6 +14,8 @@
 // Ported from ortools/sat/cp_model_utils.h at commit c931f5f7. Changed: translated from C++ to Rust.
 // Ported from ortools/sat/cp_model_utils.cc at commit c931f5f7. Changed: translated from C++ to Rust.
 
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::{LazyLock, Mutex};
@@ -1221,6 +1223,307 @@ pub fn safe_add_linear_expression_to_linear_constraint(
     true
 }
 
+// Returns if a constraint is of the form y = lin_max(x, -x).
+pub fn is_affine_int_abs(ct: &ConstraintProto) -> bool {
+    let Some(Constraint::LinMax(lin_max)) = &ct.constraint else {
+        return false;
+    };
+    if lin_max.exprs.len() != 2
+        || lin_max.target.as_ref().is_some_and(|t| t.vars.len() > 1)
+        || lin_max.exprs[0].vars.len() != 1
+        || lin_max.exprs[1].vars.len() != 1
+    {
+        return false;
+    }
+
+    if lin_max.exprs[0].offset != -lin_max.exprs[1].offset {
+        return false;
+    }
+    if positive_ref(lin_max.exprs[0].vars[0]) != positive_ref(lin_max.exprs[1].vars[0]) {
+        return false;
+    }
+
+    let left_coeff = if ref_is_positive(lin_max.exprs[0].vars[0]) {
+        lin_max.exprs[0].coeffs[0]
+    } else {
+        -lin_max.exprs[0].coeffs[0]
+    };
+    let right_coeff = if ref_is_positive(lin_max.exprs[1].vars[0]) {
+        lin_max.exprs[1].coeffs[0]
+    } else {
+        -lin_max.exprs[1].coeffs[0]
+    };
+    left_coeff == -right_coeff
+}
+
+// Returns true iff a == b * b_scaling. Note that this relies on a hash-map and
+// does not care about the order of the terms.
+pub fn linear_expression_protos_are_equal(
+    a: &LinearExpressionProto,
+    b: &LinearExpressionProto,
+    b_scaling: i64,
+) -> bool {
+    if a.vars.len() != b.vars.len() {
+        return false;
+    }
+    if a.offset != b.offset * b_scaling {
+        return false;
+    }
+    let mut coeffs: HashMap<i32, i64> = HashMap::new();
+    for i in 0..a.vars.len() {
+        *coeffs.entry(a.vars[i]).or_default() += a.coeffs[i];
+        *coeffs.entry(b.vars[i]).or_default() += -b.coeffs[i] * b_scaling;
+    }
+
+    for &coeff in coeffs.values() {
+        if coeff != 0 {
+            return false;
+        }
+    }
+    true
+}
+
+// Contrary to LinearExpressionProtosAreEqual(), this does not use hash_map.
+pub fn linear_expression_protos_are_exactly_equal(
+    a: &LinearExpressionProto,
+    b: &LinearExpressionProto,
+) -> bool {
+    a.vars == b.vars && a.coeffs == b.coeffs && a.offset == b.offset
+}
+
+// Compares two LinearExpressionProtos lexicographically by (vars, coeffs,
+// offset).
+pub fn linear_expression_proto_less_than(
+    a: &LinearExpressionProto,
+    b: &LinearExpressionProto,
+) -> bool {
+    if a.vars != b.vars {
+        return a.vars < b.vars;
+    }
+    if a.coeffs != b.coeffs {
+        return a.coeffs < b.coeffs;
+    }
+    a.offset < b.offset
+}
+
+// Returns true if the expression has unique positive variables sorted by vars,
+// non-zero coefficients, and no variable in enforcements.
+pub fn linear_expression_is_canonical(
+    enforcements: &HashSet<i32>,
+    expr: &LinearExpressionProto,
+) -> bool {
+    if expr.vars.len() != expr.coeffs.len() {
+        return false;
+    }
+    for i in 0..expr.vars.len() {
+        let var = expr.vars[i];
+        if !ref_is_positive(var) || expr.coeffs[i] == 0 {
+            return false;
+        }
+        if i > 0 && expr.vars[i - 1] >= var {
+            return false;
+        }
+        if enforcements.contains(&var) || enforcements.contains(&negated_ref(var)) {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn linear_expression_is_canonical_without_enforcements(expr: &LinearExpressionProto) -> bool {
+    linear_expression_is_canonical(&HashSet::new(), expr)
+}
+
+// Returns true if the lin_max constraint is canonical: its enforcement
+// literals are sorted and unique (with distinct variables) and do not appear
+// in target or exprs, and its lin_max argument is canonical.
+pub fn lin_max_is_canonical(ct: &ConstraintProto) -> bool {
+    let Some(Constraint::LinMax(lin_max)) = &ct.constraint else {
+        return false;
+    };
+    for i in 1..ct.enforcement_literal.len() {
+        if ct.enforcement_literal[i - 1] >= ct.enforcement_literal[i] {
+            return false;
+        }
+    }
+    if sorted_literals_have_opposite_pair(&ct.enforcement_literal) {
+        return false;
+    }
+    let enforcements: HashSet<i32> = ct.enforcement_literal.iter().copied().collect();
+    // The target of the C++ `lin_max.target()` is the empty default message when it is unset.
+    let default_target = LinearExpressionProto::default();
+    let target = lin_max.target.as_ref().unwrap_or(&default_target);
+    if !linear_expression_is_canonical(&enforcements, target) {
+        return false;
+    }
+    for expr in &lin_max.exprs {
+        if !linear_expression_is_canonical(&enforcements, expr) {
+            return false;
+        }
+    }
+    lin_max
+        .exprs
+        .is_sorted_by(|a, b| !linear_expression_proto_less_than(b, a))
+}
+
+// The messages that hold a list of variables and the list of their coefficients.
+pub trait ProtoWithVarsAndCoeffs {
+    fn vars(&self) -> &[i32];
+    fn coeffs(&self) -> &[i64];
+    fn clear_vars_and_coeffs(&mut self);
+    fn add_var_and_coeff(&mut self, var: i32, coeff: i64);
+}
+
+macro_rules! impl_proto_with_vars_and_coeffs {
+    ($($proto:ty),+) => {
+        $(
+            impl ProtoWithVarsAndCoeffs for $proto {
+                fn vars(&self) -> &[i32] {
+                    &self.vars
+                }
+
+                fn coeffs(&self) -> &[i64] {
+                    &self.coeffs
+                }
+
+                fn clear_vars_and_coeffs(&mut self) {
+                    self.vars.clear();
+                    self.coeffs.clear();
+                }
+
+                fn add_var_and_coeff(&mut self, var: i32, coeff: i64) {
+                    self.vars.push(var);
+                    self.coeffs.push(coeff);
+                }
+            }
+        )+
+    };
+}
+
+impl_proto_with_vars_and_coeffs!(LinearExpressionProto, LinearConstraintProto);
+
+fn canonicalize_linear_terms<P: ProtoWithVarsAndCoeffs>(
+    enforcements: &HashSet<i32>,
+    proto: &mut P,
+) -> i64 {
+    let mut sum_of_fixed_terms: i64 = 0;
+    let mut terms: Vec<(i32, i64)> = Vec::with_capacity(proto.vars().len());
+    debug_assert_eq!(proto.vars().len(), proto.coeffs().len());
+    for i in 0..proto.vars().len() {
+        let var = proto.vars()[i];
+        debug_assert!(ref_is_positive(var));
+        let coeff = proto.coeffs()[i];
+        if coeff == 0 {
+            continue;
+        }
+        if !enforcements.is_empty() {
+            if enforcements.contains(&var) {
+                sum_of_fixed_terms += coeff;
+                continue;
+            }
+            if enforcements.contains(&negated_ref(var)) {
+                continue;
+            }
+        }
+        terms.push((var, coeff));
+    }
+    terms.sort_unstable();
+    proto.clear_vars_and_coeffs();
+    let mut current_var: i32 = 0;
+    let mut current_coeff: i64 = 0;
+    for (var, coeff) in terms {
+        if var == current_var {
+            current_coeff += coeff;
+        } else {
+            if current_coeff != 0 {
+                proto.add_var_and_coeff(current_var, current_coeff);
+            }
+            current_var = var;
+            current_coeff = coeff;
+        }
+    }
+    if current_coeff != 0 {
+        proto.add_var_and_coeff(current_var, current_coeff);
+    }
+    sum_of_fixed_terms
+}
+
+// Sorts terms by variable, merges duplicate variables, removes zero
+// coefficients, and replaces any variable in enforcements with its value.
+pub fn canonicalize_linear_expression(
+    enforcements: &HashSet<i32>,
+    expr: &mut LinearExpressionProto,
+) {
+    if linear_expression_is_canonical(enforcements, expr) {
+        return;
+    }
+    expr.offset += canonicalize_linear_terms(enforcements, expr);
+}
+
+pub fn canonicalize_linear_expression_without_enforcements(expr: &mut LinearExpressionProto) {
+    canonicalize_linear_expression(&HashSet::new(), expr);
+}
+
+pub fn canonicalize_linear_expression_in_constraint(
+    enforcements: &HashSet<i32>,
+    proto: &mut LinearConstraintProto,
+) {
+    let offset = canonicalize_linear_terms(enforcements, proto);
+    if offset != 0 {
+        let domain = read_domain_from_proto(proto).addition_with(&Domain::new_value(-offset));
+        fill_domain_in_proto(&domain, proto);
+    }
+}
+
+// Canonicalizes the enforcement literals, target, and expressions of a
+// lin_max constraint, and sorts exprs by (vars, coeffs, offset).
+pub fn canonicalize_lin_max(ct: &mut ConstraintProto) {
+    debug_assert!(matches!(ct.constraint, Some(Constraint::LinMax(_))));
+    ct.enforcement_literal.sort_unstable();
+    ct.enforcement_literal.dedup();
+    if sorted_literals_have_opposite_pair(&ct.enforcement_literal) {
+        *ct = ConstraintProto::default();
+        return;
+    }
+    let enforcements: HashSet<i32> = ct.enforcement_literal.iter().copied().collect();
+    let Some(Constraint::LinMax(lin_max)) = &mut ct.constraint else {
+        panic!("the constraint is not a lin_max");
+    };
+    canonicalize_linear_expression(&enforcements, lin_max.target.get_or_insert_default());
+    for expr in &mut lin_max.exprs {
+        canonicalize_linear_expression(&enforcements, expr);
+    }
+    lin_max.exprs.sort_unstable_by(|a, b| {
+        if linear_expression_proto_less_than(a, b) {
+            Ordering::Less
+        } else if linear_expression_proto_less_than(b, a) {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    });
+    debug_assert!(lin_max_is_canonical(ct));
+}
+
+// Returns true if there is exactly one variable appearing in all the
+// expressions.
+pub fn expressions_contains_only_one_var<'a>(
+    exprs: impl IntoIterator<Item = &'a LinearExpressionProto>,
+) -> bool {
+    let mut unique_var: i32 = -1;
+    for expr in exprs {
+        for &var in &expr.vars {
+            assert!(ref_is_positive(var));
+            if unique_var == -1 {
+                unique_var = var;
+            } else if var != unique_var {
+                return false;
+            }
+        }
+    }
+    unique_var != -1
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -1789,9 +2092,192 @@ mod tests {
         assert_eq!(minimized, 1.0);
         assert_eq!(maximized, 1.0);
     }
-    // PENDING(phase 1): TEST(CanonicalizeLinMaxTest, SortsTermsAndExpressions), needs the third group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(CanonicalizeLinMaxTest, CancelsZeroCoefficientTerms), needs the third group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(CanonicalizeLinMaxTest, CanonicalizesEnforcementLiterals), needs the third group of sat/cp_model_utils.h
+    #[test]
+    fn canonicalize_lin_max_test_sorts_terms_and_expressions() {
+        // Arrange
+        let mut ct: ConstraintProto = parse_test_proto(
+            r#"
+            lin_max {
+              target {
+                vars: [ 2, 1, 2 ]
+                coeffs: [ 1, 3, 2 ]
+                offset: 4
+              }
+              exprs {
+                vars: [ 1, 0 ]
+                coeffs: [ 2, 1 ]
+                offset: 5
+              }
+              exprs {
+                vars: [ 0, 1 ]
+                coeffs: [ 1, -1 ]
+                offset: 10
+              }
+              exprs {
+                vars: [ 0, 1 ]
+                coeffs: [ 1, -1 ]
+                offset: 2
+              }
+            }
+            "#,
+        );
+        assert!(!lin_max_is_canonical(&ct));
+
+        // Act
+        canonicalize_lin_max(&mut ct);
+
+        // Assert
+        assert!(lin_max_is_canonical(&ct));
+        let expected: ConstraintProto = parse_test_proto(
+            r#"
+            lin_max {
+              target {
+                vars: [ 1, 2 ]
+                coeffs: [ 3, 3 ]
+                offset: 4
+              }
+              exprs {
+                vars: [ 0, 1 ]
+                coeffs: [ 1, -1 ]
+                offset: 2
+              }
+              exprs {
+                vars: [ 0, 1 ]
+                coeffs: [ 1, -1 ]
+                offset: 10
+              }
+              exprs {
+                vars: [ 0, 1 ]
+                coeffs: [ 1, 2 ]
+                offset: 5
+              }
+            }
+            "#,
+        );
+        assert_eq!(ct, expected);
+    }
+
+    #[test]
+    fn canonicalize_lin_max_test_cancels_zero_coefficient_terms() {
+        // Arrange
+        let mut ct: ConstraintProto = parse_test_proto(
+            r#"
+            lin_max {
+              target {
+                vars: [ 0, 1, 0 ]
+                coeffs: [ 2, 0, -2 ]
+                offset: 3
+              }
+              exprs {
+                vars: [ 1, 1 ]
+                coeffs: [ 4, -4 ]
+                offset: 7
+              }
+              exprs { offset: 1 }
+            }
+            "#,
+        );
+        assert!(!lin_max_is_canonical(&ct));
+
+        // Act
+        canonicalize_lin_max(&mut ct);
+
+        // Assert
+        assert!(lin_max_is_canonical(&ct));
+        let expected: ConstraintProto = parse_test_proto(
+            r#"
+            lin_max {
+              target { offset: 3 }
+              exprs { offset: 1 }
+              exprs { offset: 7 }
+            }
+            "#,
+        );
+        assert_eq!(ct, expected);
+    }
+
+    #[test]
+    fn canonicalize_lin_max_test_canonicalizes_enforcement_literals() {
+        // Arrange
+        let mut ct: ConstraintProto = parse_test_proto(
+            r#"
+            enforcement_literal: [ 1, -1, 1 ]
+            lin_max {
+              target {
+                vars: [ 0, 1, 2 ]
+                coeffs: [ 3, 4, 5 ]
+                offset: 1
+              }
+              exprs {
+                vars: [ 1, 2 ]
+                coeffs: [ 2, 1 ]
+                offset: 10
+              }
+              exprs {
+                vars: [ 0, 2 ]
+                coeffs: [ -2, 1 ]
+                offset: 5
+              }
+            }
+            "#,
+        );
+        assert!(!lin_max_is_canonical(&ct));
+
+        // Act
+        canonicalize_lin_max(&mut ct);
+
+        // Assert
+        assert!(lin_max_is_canonical(&ct));
+        let expected: ConstraintProto = parse_test_proto(
+            r#"
+            enforcement_literal: [ -1, 1 ]
+            lin_max {
+              target {
+                vars: [ 2 ]
+                coeffs: [ 5 ]
+                offset: 5
+              }
+              exprs {
+                vars: [ 2 ]
+                coeffs: [ 1 ]
+                offset: 5
+              }
+              exprs {
+                vars: [ 2 ]
+                coeffs: [ 1 ]
+                offset: 12
+              }
+            }
+            "#,
+        );
+        assert_eq!(ct, expected);
+
+        // Contradictory enforcement literals (x and not(x)) are not canonical and
+        // clear the constraint when canonicalized.
+        // Arrange
+        let mut contradictory_ct: ConstraintProto = parse_test_proto(
+            r#"
+            enforcement_literal: [ -1, 0 ]
+            lin_max {
+              target {
+                vars: [ 2 ]
+                coeffs: [ 1 ]
+              }
+              exprs {
+                vars: [ 2 ]
+                coeffs: [ 1 ]
+              }
+            }
+            "#,
+        );
+        assert!(!lin_max_is_canonical(&contradictory_ct));
+
+        // Act
+        canonicalize_lin_max(&mut contradictory_ct);
+
+        // Assert
+        assert!(contradictory_ct.constraint.is_none());
+    }
 
     #[test]
     fn affine_expr_test_const_and_var_helpers() {
@@ -1922,7 +2408,31 @@ mod tests {
         assert_eq!(visited, 0);
     }
 
-    // PENDING(phase 1): TEST(CpModelUtilsTest, CanonicalizeLinearConstraintProto), needs the third group of sat/cp_model_utils.h
+    #[test]
+    fn cp_model_utils_test_canonicalize_linear_constraint_proto() {
+        // Arrange
+        let mut lin: LinearConstraintProto = parse_test_proto(
+            r#"
+            vars: [ 2, 0, 2, 1 ]
+            coeffs: [ 3, 4, -1, 5 ]
+            domain: [ 10, 20 ]
+            "#,
+        );
+
+        // Act
+        // Enforcement: var 0 == 1 (shifts domain by -4), var 1 == 0 (dropped).
+        canonicalize_linear_expression_in_constraint(&HashSet::from([0, -2]), &mut lin);
+
+        // Assert
+        let expected: LinearConstraintProto = parse_test_proto(
+            r#"
+            vars: [ 2 ]
+            coeffs: [ 2 ]
+            domain: [ 6, 16 ]
+            "#,
+        );
+        assert_eq!(lin, expected);
+    }
 
     #[test]
     fn cp_model_utils_test_sorted_literal_complementary_helpers() {

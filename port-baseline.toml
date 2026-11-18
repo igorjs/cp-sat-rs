@@ -280,7 +280,7 @@ rust = "crates/sat/src/cp_model_utils.rs"
 binary = "cpsat_sat"
 module = "cp_model_utils::tests"
 upstream_cases = 36
-pending = 10
+pending = 6
 
 # util/full_precision_inequalities is ported in part, only what sat/cp_model_utils calls. Its
 # upstream test file is not ported, so every test here is an added test.

@@ -17,7 +17,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | Phase | Ignored tests | Pending lines |
 |---|---|---|
 | 0 | 0 | 0 |
-| 1 | 0 | 10 |
+| 1 | 0 | 6 |
 | 2 | 0 | 0 |
 | 3 | 0 | 0 |
 | 4 | 0 | 0 |
