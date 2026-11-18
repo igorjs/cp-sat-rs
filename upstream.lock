@@ -1,0 +1,5 @@
+# The OR-Tools source this port follows. scripts/fetch-upstream.sh reads this file.
+repo=https://github.com/google/or-tools
+commit=c931f5f778c88050a3f71d72dfc30d3d020aa821
+archive_sha256=f1535fa8649fcd6ba29c396c3e6babd6e54b6e4fe05e89b814e4df9588485879
+tree=aa62529d871c8c7bad0184e0e7c1f6825bac3afc
