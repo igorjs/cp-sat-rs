@@ -46,13 +46,16 @@ pub const K_FALSE_LITERAL_INDEX: LiteralIndex = LiteralIndex::new(-3);
 // and for a 0-based variable index x, (x << 1) encodes the variable x and the
 // same number XOR 1 encodes its negation.
 //
-// `Default` is the literal of index 0: the C++ default constructor leaves the index unset.
+// `Default` is the literal of index 0, which is what C++ value-initialisation gives
+// (`std::vector<Literal> result(n)`). A plain C++ declaration leaves the index unset.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Literal {
     index: i32,
 }
 
 impl Literal {
+    /// Panics for `i32::MIN`, whose negation overflows. C++ has undefined behaviour there
+    /// (sat/sat_literal.h:64).
     pub const fn new_signed_value(signed_value: i32) -> Literal {
         assert!(
             signed_value != 0,
@@ -241,7 +244,8 @@ mod tests {
         // Assert
         assert_eq!(text, "[+1,-4,+3]");
         assert!(clause[0] < clause[2]);
-        assert!(clause[2] <= clause[2]);
+        assert!(clause[0] <= clause[2]);
+        assert!(!(clause[2] <= clause[0]));
         assert_eq!(Literal::new_signed_value(-2).to_string(), "-2");
         assert_eq!(
             format_literal_indices(&[LiteralIndex::new(0), LiteralIndex::new(3)]),

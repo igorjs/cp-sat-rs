@@ -383,8 +383,8 @@ log::error!("Invalid interval: {invalid}");
 A C++ constant `kName` is a `pub const` named `K_NAME`, as the local constants of the ported files are. A strong type made by the macros of rule 4 has `const fn new`, so such a constant is built with it. An `operator<<` on `absl::Span<const T>` has no `Display` form in Rust, since the trait cannot be implemented for a slice: it is a free function that returns the `String`.
 
 ```cpp
-const LiteralIndex kNoLiteralIndex(-1);   // sat/sat_literal.h:42
-inline std::ostream& operator<<(std::ostream& os, absl::Span<const Literal> literals);   // sat/sat_literal.h:128
+const LiteralIndex kNoLiteralIndex(-1);   // sat/sat_literal.h:40
+inline std::ostream& operator<<(std::ostream& os, absl::Span<const Literal> literals);   // sat/sat_literal.h:123
 ```
 
 ```rust
