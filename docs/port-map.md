@@ -442,7 +442,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | util | `util/sorted_interval_list.h` | 757 | `util/sorted_interval_list_test.cc` | 74 | - | 0 | 0 | todo |
 | util | `util/stats.cc` | 267 | `util/stats_test.cc` | 16 | `base/timer.h`, `port/sysinfo.h`, `util/stats.h` | 2 | - | todo |
 | util | `util/stats.h` | 426 | `util/stats_test.cc` | 16 | `base/timer.h` | 1 | - | todo |
-| util | `util/strong_integers.h` | 493 | none | - | - | 0 | 0 | todo |
+| util | `util/strong_integers.h` | 493 | none | - | - | 0 | 0 | done |
 | util | `util/testing_utils.cc` | 98 | none | - | `util/testing_utils.h` | 2 | - | todo |
 | util | `util/testing_utils.h` | 44 | none | - | `base/log_severity.h` | 1 | - | todo |
 | util | `util/time_limit.cc` | 109 | `util/time_limit_test.cc` | 23 | `base/macros/buildenv.h`, `base/macros/os_support.h`, `util/time_limit.h` | 2 | - | todo |
