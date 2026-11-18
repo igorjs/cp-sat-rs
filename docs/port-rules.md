@@ -450,3 +450,17 @@ std::pair<double, double> TightBounds() const;   // util/full_precision_inequali
 pub fn domain_in_proto_contains<P: ProtoWithDomain>(proto: &P, value: i64) -> bool
 pub fn tight_bounds(&mut self) -> (f64, f64)
 ```
+
+## 31. Raw bytes of a field, and the case enum of a `oneof`
+
+A C++ `reinterpret_cast<const char*>` over a field or a repeated field, to hash its memory, is a trait that appends the native-endian bytes of each element. A C++ `oneof` case enum is a Rust enum of the same cases, numbered by the field numbers, since the generated Rust code holds the `oneof` as an `Option` and has no such enum.
+
+```cpp
+fasthash64(reinterpret_cast<const char*>(&field), sizeof(T), seed);   // sat/cp_model_utils.h:499
+ConstraintProto::ConstraintCase::kBoolOr   // sat/cp_model_utils.h:600
+```
+
+```rust
+fasthash64(&bytes_of_field, seed)   // bytes from field.to_ne_bytes()
+ConstraintCase::BoolOr
+```

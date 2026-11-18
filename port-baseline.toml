@@ -280,7 +280,75 @@ rust = "crates/sat/src/cp_model_utils.rs"
 binary = "cpsat_sat"
 module = "cp_model_utils::tests"
 upstream_cases = 36
-pending = 6
+pending = 0
+
+[[file.added]]
+name = "convert_cp_model_proto_to_wcnf_writes_hard_clauses_and_weights"
+reason = "upstream has no case for the wcnf writer; checks the hard clauses and the weights"
+
+[[file.added]]
+name = "convert_cp_model_proto_to_wcnf_refuses_a_model_without_an_integral_objective"
+reason = "checks the refusals of the wcnf writer"
+
+[[file.added]]
+name = "convert_cp_model_proto_to_cnf_refuses_a_model_that_is_not_pure_sat"
+reason = "checks the refusals of the cnf writer"
+
+[[file.added]]
+name = "combine_seed_is_non_negative_and_depends_on_both_arguments"
+reason = "upstream has no case for CombineSeed"
+
+[[file.added]]
+name = "combine_seed_of_a_negative_delta_dies"
+reason = "checks the CHECK_GE of CombineSeed"
+
+[[file.added]]
+name = "fingerprint_model_is_stable_and_sees_each_part_of_the_model"
+reason = "upstream has no case for FingerprintModel; checks stability and sensitivity"
+
+[[file.added]]
+name = "write_model_proto_to_file_writes_the_binary_form_and_reports_a_failure"
+reason = "upstream has no case for the file writer; checks the binary form and a failed write"
+
+[[file.added]]
+name = "is_affine_int_abs_accepts_the_absolute_value_form_only"
+reason = "upstream has no case for IsAffineIntAbs"
+
+[[file.added]]
+name = "linear_expression_protos_are_equal_ignores_the_order_and_applies_the_scaling"
+reason = "upstream has no case for the equality and order of expressions"
+
+[[file.added]]
+name = "expressions_contains_only_one_var_needs_a_single_shared_variable"
+reason = "upstream has no case for ExpressionsContainsOnlyOneVar"
+
+[[file.added]]
+name = "apply_to_all_indices_visits_the_variables_literals_and_intervals_of_each_kind"
+reason = "upstream has no case for the index visitors"
+
+[[file.added]]
+name = "interval_variables_are_inserted_into_and_removed_from_a_bitset"
+reason = "upstream has no case for the interval bitset helpers"
+
+[[file.added]]
+name = "domain_helpers_read_write_and_search_a_proto_domain"
+reason = "upstream has no case for the domain helpers of a proto"
+
+[[file.added]]
+name = "objective_value_helpers_scale_postsolve_and_presolve"
+reason = "upstream has no case for the objective scaling helpers"
+
+[[file.added]]
+name = "linear_expression_helpers_divide_evaluate_and_convert"
+reason = "upstream has no case for DivideLinearExpression and the affine helpers"
+
+[[file.added]]
+name = "literals_to_linear_moves_the_offset_of_a_negated_literal_into_the_bounds"
+reason = "upstream has no case for LiteralsToLinear"
+
+[[file.added]]
+name = "find_complementary_var_in_sorted_literals_dies_on_unsorted_literals_in_debug"
+reason = "checks the DCHECK of a sorted input"
 
 # util/full_precision_inequalities is ported in part, only what sat/cp_model_utils calls. Its
 # upstream test file is not ported, so every test here is an added test.

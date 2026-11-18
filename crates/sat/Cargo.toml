@@ -10,8 +10,11 @@ publish = false
 name = "cpsat_sat"
 
 [dependencies]
+cpsat-base = { path = "../base" }
 cpsat-proto = { path = "../proto" }
 cpsat-util = { path = "../util" }
+prost.workspace = true
 
 [dev-dependencies]
 cpsat-testutil = { path = "../testutil" }
+prost-reflect.workspace = true
