@@ -17,7 +17,7 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | Phase | Ignored tests | Pending lines |
 |---|---|---|
 | 0 | 0 | 0 |
-| 1 | 0 | 18 |
+| 1 | 0 | 10 |
 | 2 | 0 | 0 |
 | 3 | 0 | 0 |
 | 4 | 0 | 0 |
@@ -419,8 +419,8 @@ Non-test `.cc` files of `sat`: 117. With a test file: 82. Without a test file: 3
 | util | `util/fp_roundtrip_conv.h` | 106 | `util/fp_roundtrip_conv_test.cc` | 10 | `base/base_export.h` | 1 | - | todo |
 | util | `util/fp_utils.cc` | 504 | `util/fp_utils_test.cc` | 33 | `base/types.h`, `util/bitset.h`, `util/fp_utils.h`, `util/full_precision_inequalities.h` | 3 | - | todo |
 | util | `util/fp_utils.h` | 431 | `util/fp_utils_test.cc` | 33 | `util/full_precision_inequalities.h` | 2 | - | todo |
-| util | `util/full_precision_inequalities.cc` | 669 | `util/full_precision_inequalities_test.cc` | 62 | `base/types.h`, `util/full_precision_inequalities.h` | 2 | - | todo |
-| util | `util/full_precision_inequalities.h` | 607 | `util/full_precision_inequalities_test.cc` | 62 | `port/attributes.h` | 1 | - | todo |
+| util | `util/full_precision_inequalities.cc` | 669 | `util/full_precision_inequalities_test.cc` | 62 | `base/types.h`, `util/full_precision_inequalities.h` | 2 | - | done |
+| util | `util/full_precision_inequalities.h` | 607 | `util/full_precision_inequalities_test.cc` | 62 | `port/attributes.h` | 1 | - | done |
 | util | `util/integer_pq.h` | 192 | `util/integer_pq_test.cc` | 1 | - | 0 | - | todo |
 | util | `util/logging.cc` | 134 | `util/logging_test.cc` | 5 | `util/logging.h` | 3 | - | todo |
 | util | `util/logging.h` | 189 | `util/logging_test.cc` | 5 | `base/timer.h`, `util/time_limit.h` | 2 | - | todo |

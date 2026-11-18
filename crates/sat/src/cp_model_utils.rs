@@ -19,8 +19,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{LazyLock, Mutex};
 
 use cpsat_proto::constraint_proto::Constraint;
-use cpsat_proto::{ConstraintProto, CpModelProto, LinearExpressionProto};
+use cpsat_proto::{
+    ConstraintProto, CpModelProto, CpObjectiveProto, FloatObjectiveProto, IntegerVariableProto,
+    LinearConstraintProto, LinearExpressionProto,
+};
 use cpsat_util::bitset::Bitset64;
+use cpsat_util::full_precision_inequalities::TightSum;
+use cpsat_util::saturated_arithmetic::{at_min_or_max_int64, cap_prod};
+use cpsat_util::sorted_interval_list::Domain;
 
 // DEBUG ONLY. When set to true, SolveCpModel() will dump its model protos
 // (original model, presolved model, mapping model) in text format to
@@ -909,6 +915,312 @@ fn interval_vars(ct: &ConstraintProto) -> impl Iterator<Item = i32> + '_ {
     .flat_map(|expr| expr.vars.iter().copied())
 }
 
+// The protos that hold a `domain` field: a sorted list of disjoint intervals.
+pub trait ProtoWithDomain {
+    fn domain(&self) -> &[i64];
+    fn domain_mut(&mut self) -> &mut Vec<i64>;
+}
+
+macro_rules! impl_proto_with_domain {
+    ($($proto:ty),+) => {
+        $(
+            impl ProtoWithDomain for $proto {
+                fn domain(&self) -> &[i64] {
+                    &self.domain
+                }
+
+                fn domain_mut(&mut self) -> &mut Vec<i64> {
+                    &mut self.domain
+                }
+            }
+        )+
+    };
+}
+
+impl_proto_with_domain!(
+    IntegerVariableProto,
+    LinearConstraintProto,
+    CpObjectiveProto
+);
+
+// Returns true if a proto.domain() contains the given value.
+// The domain is expected to be encoded as a sorted disjoint interval list.
+pub fn domain_in_proto_contains<P: ProtoWithDomain>(proto: &P, value: i64) -> bool {
+    let domain = proto.domain();
+    for i in (0..domain.len()).step_by(2) {
+        if value >= domain[i] && value <= domain[i + 1] {
+            return true;
+        }
+    }
+    false
+}
+
+// Serializes a Domain into the domain field of a proto.
+pub fn fill_domain_in_proto<P: ProtoWithDomain>(domain: &Domain, proto: &mut P) {
+    let proto_domain = proto.domain_mut();
+    proto_domain.clear();
+    proto_domain.reserve(2 * domain.num_intervals() as usize);
+    for interval in domain {
+        proto_domain.push(interval.start);
+        proto_domain.push(interval.end);
+    }
+}
+
+pub fn fill_domain_in_proto_bounds<P: ProtoWithDomain>(lb: i64, ub: i64, proto: &mut P) {
+    let proto_domain = proto.domain_mut();
+    proto_domain.clear();
+    proto_domain.reserve(2);
+    proto_domain.push(lb);
+    proto_domain.push(ub);
+}
+
+pub fn fill_domain_in_proto_value<P: ProtoWithDomain>(value: i64, proto: &mut P) {
+    let proto_domain = proto.domain_mut();
+    proto_domain.clear();
+    proto_domain.reserve(2);
+    proto_domain.push(value);
+    proto_domain.push(value);
+}
+
+// Reads a Domain from the domain field of a proto.
+pub fn read_domain_from_proto<P: ProtoWithDomain>(proto: &P) -> Domain {
+    Domain::from_flat_span_of_intervals(proto.domain())
+}
+
+// Returns the list of values in a given domain.
+// This will fail if the domain contains more than one million values.
+//
+// TODO(user): work directly on the Domain class instead.
+pub fn all_values_in_domain<P: ProtoWithDomain>(proto: &P) -> Vec<i64> {
+    let domain = proto.domain();
+    let mut result = Vec::new();
+    for i in (0..domain.len()).step_by(2) {
+        // A range, unlike the C++ loop counter, does not overflow at the largest value.
+        for v in domain[i]..=domain[i + 1] {
+            assert!(result.len() as f64 <= 1e6);
+            result.push(v);
+        }
+    }
+    result
+}
+
+// Scales back an objective value to a double value from the original model.
+pub fn scale_objective_value(proto: &CpObjectiveProto, value: i64) -> f64 {
+    let mut result = value as f64;
+    if value == i64::MIN {
+        result = f64::NEG_INFINITY;
+    }
+    if value == i64::MAX {
+        result = f64::INFINITY;
+    }
+    result += proto.offset;
+    if proto.scaling_factor == 0.0 {
+        return result;
+    }
+    proto.scaling_factor * result
+}
+
+// Removes the objective scaling and offset from the given value.
+pub fn unscale_objective_value(proto: &CpObjectiveProto, value: f64) -> f64 {
+    let mut result = value;
+    if proto.scaling_factor != 0.0 {
+        result /= proto.scaling_factor;
+    }
+    result - proto.offset
+}
+
+// Transforms an inner objective value to an "outer" one (original value before
+// presolve). Note that the "outer" objective here refers to the integer
+// expression of the objective before presolve, but not counting the objective
+// offset and/or scaling. So this is not completely in the user-domain.
+pub fn postsolve_inner_objective_value(proto: &CpObjectiveProto, value: i64) -> i64 {
+    if value == i64::MIN || value == i64::MAX {
+        return value;
+    }
+    if proto.integer_scaling_factor == 0 {
+        return value + proto.integer_before_offset;
+    }
+    (value + proto.integer_before_offset) * proto.integer_scaling_factor
+        + proto.integer_after_offset
+}
+
+// Inverse of PostsolveInnerObjectiveValue(). See the comments above.
+pub fn presolve_inner_objective_value(proto: &CpObjectiveProto, value: i64) -> i64 {
+    if proto.integer_scaling_factor == 0 {
+        return value - proto.integer_before_offset;
+    }
+    (value - proto.integer_after_offset) / proto.integer_scaling_factor
+        - proto.integer_before_offset
+}
+
+// Computes the "inner" objective of a response that contains a solution.
+// This is the objective without offset and scaling. Call ScaleObjectiveValue()
+// to get the user-facing objective.
+pub fn compute_inner_objective(objective: &CpObjectiveProto, solution: &[i64]) -> i64 {
+    let mut objective_value: i64 = 0;
+    for i in 0..objective.vars.len() {
+        let mut coeff = objective.coeffs[i];
+        let r#ref = objective.vars[i];
+        let var = positive_ref(r#ref);
+        if !ref_is_positive(r#ref) {
+            coeff = -coeff;
+        }
+        objective_value += coeff * solution[var as usize];
+    }
+    objective_value
+}
+
+pub fn compute_float_objective_value(proto: &FloatObjectiveProto, solution: &[i64]) -> f64 {
+    let mut sum = TightSum::default();
+    sum.add(proto.offset);
+    for i in 0..proto.vars.len() {
+        sum.add_prod(proto.coeffs[i], solution[proto.vars[i] as usize]);
+    }
+    if proto.maximize {
+        sum.tight_lower_bound()
+    } else {
+        sum.tight_upper_bound()
+    }
+}
+
+// Returns true if a linear expression can be reduced to a single ref.
+// That is -var or +var.
+pub fn expression_contains_single_ref(expr: &LinearExpressionProto) -> bool {
+    // `wrapping_abs` keeps the value the optimised C++ `std::abs` gives for the smallest int64.
+    expr.offset == 0 && expr.vars.len() == 1 && expr.coeffs[0].wrapping_abs() == 1
+}
+
+// Checks if the expression is affine or constant.
+pub fn expression_is_affine(expr: &LinearExpressionProto) -> bool {
+    expr.vars.len() <= 1
+}
+
+// Returns the reference the expression can be reduced to. It will DCHECK that
+// ExpressionContainsSingleRef(expr) is true.
+pub fn get_single_ref_from_expression(expr: &LinearExpressionProto) -> i32 {
+    debug_assert!(expression_contains_single_ref(expr));
+    if expr.coeffs[0] == 1 {
+        expr.vars[0]
+    } else {
+        negated_ref(expr.vars[0])
+    }
+}
+
+// Evaluates an affine expression at the given value.
+pub fn affine_expression_value_at(expr: &LinearExpressionProto, value: i64) -> i64 {
+    assert_eq!(1, expr.vars.len());
+    expr.offset + value * expr.coeffs[0]
+}
+
+// Returns the value of the inner variable of an affine expression from the
+// value of the expression. It will DCHECK that the result is valid.
+pub fn get_inner_var_value(expr: &LinearExpressionProto, value: i64) -> i64 {
+    debug_assert_eq!(expr.vars.len(), 1);
+    let var_value = (value - expr.offset) / expr.coeffs[0];
+    debug_assert_eq!(value, var_value * expr.coeffs[0] + expr.offset);
+    var_value
+}
+
+// Returns true if the expression is a * var + b.
+pub fn affine_expression_contains_var(expr: &LinearExpressionProto, var: i32) -> bool {
+    expr.vars.len() == 1 && expr.vars[0] == var
+}
+
+// Adds a linear expression proto to a linear constraint in place.
+//
+// Important: The domain must already be set, otherwise the offset will be lost.
+// We also do not do any duplicate detection, so the constraint might need
+// presolving afterwards.
+pub fn add_linear_expression_to_linear_constraint(
+    expr: &LinearExpressionProto,
+    coefficient: i64,
+    linear: &mut LinearConstraintProto,
+) {
+    for i in 0..expr.vars.len() {
+        linear.vars.push(expr.vars[i]);
+        linear.coeffs.push(expr.coeffs[i] * coefficient);
+    }
+    debug_assert!(!linear.domain.is_empty());
+    let shift = coefficient * expr.offset;
+    if shift != 0 {
+        let domain = read_domain_from_proto(linear).addition_with(&Domain::new_value(-shift));
+        fill_domain_in_proto(&domain, linear);
+    }
+}
+
+// Same as above, but with a single term (lit, coeff). Note that lit can be
+// negative. The offset is relative to the linear expression (and should be
+// negated when added to the rhs of the linear constraint proto).
+pub fn add_weighted_literal_to_linear_constraint(
+    lit: i32,
+    coeff: i64,
+    linear: &mut LinearConstraintProto,
+    offset: &mut i64,
+) {
+    if coeff == 0 {
+        return;
+    }
+    if ref_is_positive(lit) {
+        linear.vars.push(lit);
+        linear.coeffs.push(coeff);
+    } else {
+        linear.vars.push(negated_ref(lit));
+        linear.coeffs.push(-coeff);
+        *offset += coeff;
+    }
+}
+
+// Sets `linear` to the constraint "lb <= sum(`literals`) <= ub".
+pub fn literals_to_linear(
+    literals: &[i32],
+    mut lb: i64,
+    mut ub: i64,
+    linear: &mut LinearConstraintProto,
+) {
+    *linear = LinearConstraintProto::default();
+    for &lit in literals {
+        if ref_is_positive(lit) {
+            linear.vars.push(lit);
+            linear.coeffs.push(1);
+        } else {
+            linear.vars.push(negated_ref(lit));
+            linear.coeffs.push(-1);
+            lb -= 1;
+            ub -= 1;
+        }
+    }
+    linear.domain.push(lb);
+    linear.domain.push(ub);
+}
+
+// Same method, but returns if the addition was possible without overflowing.
+pub fn safe_add_linear_expression_to_linear_constraint(
+    expr: &LinearExpressionProto,
+    coefficient: i64,
+    linear: &mut LinearConstraintProto,
+) -> bool {
+    for i in 0..expr.vars.len() {
+        linear.vars.push(expr.vars[i]);
+        let prod = cap_prod(expr.coeffs[i], coefficient);
+        if at_min_or_max_int64(prod) {
+            return false;
+        }
+        linear.coeffs.push(prod);
+    }
+    debug_assert!(!linear.domain.is_empty());
+
+    let shift = cap_prod(coefficient, expr.offset);
+    if at_min_or_max_int64(shift) {
+        return false;
+    }
+    let d = read_domain_from_proto(linear).addition_with(&Domain::new_value(-shift));
+    if at_min_or_max_int64(d.min()) || at_min_or_max_int64(d.max()) {
+        return false;
+    }
+    fill_domain_in_proto(&d, linear);
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -1144,11 +1456,162 @@ mod tests {
     }
 
     // PENDING(phase 1): TEST(ConstraintCaseNameTest, TestFewCases), needs the fourth group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(ComputeInnerObjectiveTest, SimpleExample), needs the second group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(GetRefFromExpressionTest, BasicAPI), needs the second group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(AddLinearExpressionToLinearConstraintTest, BasicApi), needs the second group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(AddWeightedLiteralToLinearConstraintTest, BasicApi), needs the second group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(SafeAddLinearExpressionToLinearConstraintTest, BasicApi), needs the second group of sat/cp_model_utils.h
+    #[test]
+    fn compute_inner_objective_test_simple_example() {
+        // Arrange
+        let model_proto: CpModelProto = parse_test_proto(
+            r#"
+            variables { domain: [ 0, 5 ] }
+            variables { domain: [ 0, 5 ] }
+            objective {
+              vars: [ 0, 1 ]
+              coeffs: [ 2, 3 ]
+              offset: 3
+              scaling_factor: 1.5
+            }
+            "#,
+        );
+        let objective = model_proto.objective.as_ref().unwrap();
+        let solution: Vec<i64> = vec![2, 3];
+
+        // Act and Assert
+        assert_eq!(compute_inner_objective(objective, &solution), 13);
+        assert_eq!(scale_objective_value(objective, 13), (13.0 + 3.0) * 1.5);
+        assert_eq!(unscale_objective_value(objective, (13.0 + 3.0) * 1.5), 13.0);
+    }
+
+    #[test]
+    fn get_ref_from_expression_test_basic_api() {
+        // Arrange
+        let mut expr = LinearExpressionProto::default();
+
+        // Act and Assert
+        assert!(!expression_contains_single_ref(&expr));
+        expr.offset = 1;
+        assert!(!expression_contains_single_ref(&expr));
+        expr.offset = 0;
+        expr.vars.push(2);
+        expr.coeffs.push(1);
+        assert!(expression_contains_single_ref(&expr));
+        assert_eq!(2, get_single_ref_from_expression(&expr));
+        expr.coeffs[0] = -1;
+        assert!(expression_contains_single_ref(&expr));
+        assert_eq!(-3, get_single_ref_from_expression(&expr));
+        expr.coeffs[0] = 2;
+        assert!(!expression_contains_single_ref(&expr));
+        expr.coeffs[0] = 1;
+        expr.vars.push(3);
+        expr.coeffs.push(-1);
+        assert!(!expression_contains_single_ref(&expr));
+    }
+
+    #[test]
+    fn add_linear_expression_to_linear_constraint_test_basic_api() {
+        // Arrange
+        let mut linear = LinearConstraintProto {
+            vars: vec![1],
+            coeffs: vec![-1],
+            domain: vec![2, 4],
+        };
+        let expr = LinearExpressionProto {
+            vars: vec![2, 3],
+            coeffs: vec![2, 5],
+            offset: 1,
+        };
+
+        // Act
+        add_linear_expression_to_linear_constraint(&expr, -7, &mut linear);
+
+        // Assert
+        let expected_linear_constraint: LinearConstraintProto = parse_test_proto(
+            r#"
+            vars: [ 1, 2, 3 ]
+            coeffs: [ -1, -14, -35 ]
+            domain: [ 9, 11 ]
+            "#,
+        );
+        assert_eq!(linear, expected_linear_constraint);
+    }
+
+    #[test]
+    fn add_weighted_literal_to_linear_constraint_test_basic_api() {
+        // Arrange
+        let mut linear = LinearConstraintProto {
+            vars: vec![1],
+            coeffs: vec![-1],
+            domain: vec![2, 4],
+        };
+        let mut offset: i64 = 0;
+
+        // Act
+        add_weighted_literal_to_linear_constraint(0, 4, &mut linear, &mut offset);
+
+        // Assert
+        let expected_linear_constraint_1: LinearConstraintProto = parse_test_proto(
+            r#"
+            vars: [ 1, 0 ]
+            coeffs: [ -1, 4 ]
+            domain: [ 2, 4 ]
+            "#,
+        );
+        assert_eq!(linear, expected_linear_constraint_1);
+        assert_eq!(offset, 0);
+
+        // Act
+        add_weighted_literal_to_linear_constraint(-3, 5, &mut linear, &mut offset);
+
+        // Assert
+        let expected_linear_constraint_2: LinearConstraintProto = parse_test_proto(
+            r#"
+            vars: [ 1, 0, 2 ]
+            coeffs: [ -1, 4, -5 ]
+            domain: [ 2, 4 ]
+            "#,
+        );
+        assert_eq!(linear, expected_linear_constraint_2);
+        assert_eq!(offset, 5);
+    }
+
+    #[test]
+    fn safe_add_linear_expression_to_linear_constraint_test_basic_api() {
+        // Arrange
+        let mut linear = LinearConstraintProto {
+            vars: vec![1],
+            coeffs: vec![-1],
+            domain: vec![2, 4],
+        };
+        let expr = LinearExpressionProto {
+            vars: vec![2, 3],
+            coeffs: vec![2, 5],
+            offset: 1,
+        };
+        let large_coeff = LinearExpressionProto {
+            vars: vec![0],
+            coeffs: vec![10_000_000_000],
+            offset: 0,
+        };
+        let large_offset = LinearExpressionProto {
+            offset: 10_000_000_000,
+            ..Default::default()
+        };
+
+        // Act and Assert
+        assert!(safe_add_linear_expression_to_linear_constraint(
+            &expr,
+            -7,
+            &mut linear
+        ));
+        assert!(!safe_add_linear_expression_to_linear_constraint(
+            &large_coeff,
+            10_000_000_000,
+            &mut linear
+        ));
+        assert!(!safe_add_linear_expression_to_linear_constraint(
+            &large_offset,
+            10_000_000_000,
+            &mut linear
+        ));
+    }
     // PENDING(phase 1): TEST(FingerprintTest, BasicApi), needs the fourth group of sat/cp_model_utils.h
     // PENDING(phase 1): TEST(ConvertCpModelProtoToCnfTest, BasicExample), needs the fourth group of sat/cp_model_utils.h
     // PENDING(phase 1): TEST(ConvertCpModelProtoToCnfTest, FixedVariables), needs the fourth group of sat/cp_model_utils.h
@@ -1256,9 +1719,76 @@ mod tests {
         assert_eq!(get_affine_expr_max(&neg_expr, &model_proto), 11);
     }
 
-    // PENDING(phase 1): TEST(ComputeFloatObjectiveValueTest, DirectedRoundingForMinAndMax), needs the second group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(ComputeFloatObjectiveValueTest, DirectedRoundingForZeroPointOnePlusTwo), needs the second group of sat/cp_model_utils.h
-    // PENDING(phase 1): TEST(ComputeFloatObjectiveValueTest, ExactWithLargeInt64Solution), needs the second group of sat/cp_model_utils.h
+    #[test]
+    fn compute_float_objective_value_test_directed_rounding_for_min_and_max() {
+        // 1.0 + 2^-53 is halfway between 1.0 and nextafter(1.0, inf) and rounds to
+        // nearest-even (1.0) in standard double arithmetic.
+        // Arrange
+        let mut proto = FloatObjectiveProto {
+            vars: vec![0, 1],
+            coeffs: vec![1.0, 2.0_f64.powi(-53)],
+            ..Default::default()
+        };
+        let solution: Vec<i64> = vec![1, 1];
+
+        // Act
+        proto.maximize = false;
+        let minimized = compute_float_objective_value(&proto, &solution);
+        proto.maximize = true;
+        let maximized = compute_float_objective_value(&proto, &solution);
+
+        // Assert
+        assert_eq!(minimized, 1.0_f64.next_up());
+        assert_eq!(maximized, 1.0);
+    }
+
+    #[test]
+    fn compute_float_objective_value_test_directed_rounding_for_zero_point_one_plus_two() {
+        // In infinite precision, double(0.1) + double(0.2) lies strictly between
+        // nextafter(0.1 + 0.2, -inf) and (0.1 + 0.2).
+        // Arrange
+        let mut proto = FloatObjectiveProto {
+            vars: vec![0, 1],
+            coeffs: vec![0.1, 0.2],
+            ..Default::default()
+        };
+        let solution: Vec<i64> = vec![1, 1];
+
+        let rounded_up = 0.1 + 0.2;
+        let rounded_down = f64::next_down(rounded_up);
+
+        // Act
+        proto.maximize = false;
+        let minimized = compute_float_objective_value(&proto, &solution);
+        proto.maximize = true;
+        let maximized = compute_float_objective_value(&proto, &solution);
+
+        // Assert
+        assert_eq!(minimized, rounded_up);
+        assert_eq!(maximized, rounded_down);
+    }
+
+    #[test]
+    fn compute_float_objective_value_test_exact_with_large_int64_solution() {
+        // (2^53 + 1) cannot be represented in double without losing the +1 bit.
+        // Arrange
+        let mut proto = FloatObjectiveProto {
+            vars: vec![0, 1],
+            coeffs: vec![1.0, 1.0],
+            ..Default::default()
+        };
+        let solution: Vec<i64> = vec![(1_i64 << 53) + 1, -(1_i64 << 53)];
+
+        // Act
+        proto.maximize = false;
+        let minimized = compute_float_objective_value(&proto, &solution);
+        proto.maximize = true;
+        let maximized = compute_float_objective_value(&proto, &solution);
+
+        // Assert
+        assert_eq!(minimized, 1.0);
+        assert_eq!(maximized, 1.0);
+    }
     // PENDING(phase 1): TEST(CanonicalizeLinMaxTest, SortsTermsAndExpressions), needs the third group of sat/cp_model_utils.h
     // PENDING(phase 1): TEST(CanonicalizeLinMaxTest, CancelsZeroCoefficientTerms), needs the third group of sat/cp_model_utils.h
     // PENDING(phase 1): TEST(CanonicalizeLinMaxTest, CanonicalizesEnforcementLiterals), needs the third group of sat/cp_model_utils.h

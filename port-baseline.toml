@@ -280,4 +280,41 @@ rust = "crates/sat/src/cp_model_utils.rs"
 binary = "cpsat_sat"
 module = "cp_model_utils::tests"
 upstream_cases = 36
-pending = 18
+pending = 10
+
+# util/full_precision_inequalities is ported in part, only what sat/cp_model_utils calls. Its
+# upstream test file is not ported, so every test here is an added test.
+[[file]]
+upstream = "util/full_precision_inequalities.h"
+rust = "crates/util/src/full_precision_inequalities.rs"
+binary = "cpsat_util"
+module = "full_precision_inequalities::tests"
+upstream_cases = 0
+
+[[file.added]]
+name = "a_sum_that_is_not_a_double_gets_one_step_wide_bounds"
+reason = "checks the bounds of 1 + 2^-53, which no double holds"
+
+[[file.added]]
+name = "a_negative_exact_sum_has_equal_bounds"
+reason = "checks the two's complement path of a negative sum and its integer bounds"
+
+[[file.added]]
+name = "terms_that_cancel_leave_the_small_term"
+reason = "checks the carry of a large term cancelled by its opposite, which leaves the small term"
+
+[[file.added]]
+name = "a_product_past_int64_has_no_upper_integer_bound"
+reason = "checks the integer bounds of a product above the largest int64"
+
+[[file.added]]
+name = "an_infinite_term_makes_the_sum_infinite_and_fixes_its_sign"
+reason = "checks the infinite state and its bounds"
+
+[[file.added]]
+name = "opposite_infinite_terms_die"
+reason = "checks the CHECK_EQ of the infinite sign"
+
+[[file.added]]
+name = "an_infinite_factor_times_zero_dies"
+reason = "checks the CHECK_NE of the zero factor"
