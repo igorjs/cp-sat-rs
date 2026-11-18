@@ -5,31 +5,32 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
-/// What `unimplemented!` starts its message with.
-const STUB_PREFIX: &str = "not implemented";
+/// What `unimplemented!` and `todo!` start their messages with.
+const STUB_PREFIXES: [&str; 2] = ["not implemented", "not yet implemented"];
 
-fn panic_message(payload: &(dyn Any + Send)) -> String {
-    payload
-        .downcast_ref::<String>()
-        .cloned()
-        .or_else(|| {
-            payload
-                .downcast_ref::<&str>()
-                .map(|text| (*text).to_owned())
-        })
-        .unwrap_or_default()
+/// The text of a panic, or `None` when the payload is not a string, as with
+/// `std::panic::panic_any(42)`.
+fn panic_message(payload: &(dyn Any + Send)) -> Option<String> {
+    payload.downcast_ref::<String>().cloned().or_else(|| {
+        payload
+            .downcast_ref::<&str>()
+            .map(|text| (*text).to_owned())
+    })
 }
 
 /// Fails unless `f` panics with a message that contains `message`.
 ///
-/// A stub, which panics with `unimplemented!`, never counts as a death.
+/// A stub, which panics with `unimplemented!` or `todo!`, never counts as a death, and
+/// neither does a panic whose payload is not a string.
 pub fn expect_death<F: FnOnce()>(f: F, message: &str) {
     let Err(payload) = catch_unwind(AssertUnwindSafe(f)) else {
         panic!("expected a panic containing {message:?}, but the closure did not panic");
     };
-    let found = panic_message(payload.as_ref());
+    let Some(found) = panic_message(payload.as_ref()) else {
+        panic!("the panic payload is not a string, so it is not a death");
+    };
     assert!(
-        !found.starts_with(STUB_PREFIX),
+        !STUB_PREFIXES.iter().any(|prefix| found.starts_with(prefix)),
         "a stub is not a death: {found:?}"
     );
     assert!(
@@ -45,7 +46,7 @@ pub fn expect_debug_death<F: FnOnce()>(f: F, message: &str) {
     } else if let Err(payload) = catch_unwind(AssertUnwindSafe(f)) {
         panic!(
             "the closure panicked in a release build: {:?}",
-            panic_message(payload.as_ref())
+            panic_message(payload.as_ref()).unwrap_or_default()
         );
     }
 }
@@ -91,6 +92,26 @@ mod tests {
 
         // Act and Assert
         expect_death(stub, "");
+    }
+
+    #[test]
+    #[should_panic(expected = "a stub is not a death")]
+    fn expect_death_fails_for_a_todo_even_with_an_empty_message() {
+        // Arrange
+        let stub = || todo!("later");
+
+        // Act and Assert
+        expect_death(stub, "");
+    }
+
+    #[test]
+    #[should_panic(expected = "payload is not a string")]
+    fn expect_death_fails_for_a_panic_whose_payload_is_not_a_string() {
+        // Arrange
+        let dies = || std::panic::panic_any(42_u32);
+
+        // Act and Assert
+        expect_death(dies, "");
     }
 
     #[test]

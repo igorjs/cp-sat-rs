@@ -187,6 +187,7 @@ limits: 123 1000
 limits: 122 1000
 limits: 5 1000
 limits: -1 1000
+limits: 100000 -1
 short:
 | name: "m" variables { name: "x" domain: 0 domain: 10 } variables { name: "y" domain: -5 domain: 5 } constraints { linear { vars: 0 vars: 1 coeffs: 1 coeffs: 2 domain: 0 domain: 20 } } objective { vars: 0 coeffs: 1 }
 long:
@@ -285,3 +286,23 @@ limited:
 | [operations_research.sat.CpModelProto of 54 bytes]
 limited:
 | [operations_research.sat.CpModelProto of 54 bytes]
+limited:
+| [operations_research.sat.CpModelProto of 54 bytes] CgFtEgcKAXgSAgAKEhAKAXkSC/v//////////wEFGg5iDAoCAAESAgECGgIAFCIGCgEAIgEB
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 110000000000000080
+short:
+| offset: -0
+long:
+| # [operations_research.sat.CpObjectiveProto of 9 bytes]
+| offset: -0
+|
+case
+message: operations_research.sat.SatParameters
+bytes: 1063
+short:
+| 2: 99
+long:
+| # [operations_research.sat.SatParameters of 2 bytes]
+| 2: 99
+|

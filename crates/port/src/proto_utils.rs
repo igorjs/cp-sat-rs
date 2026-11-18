@@ -26,6 +26,17 @@ use crate::text_format_printer;
 /// Stands for `kint32max`, the default of both limits of `protobuf_debug_string`.
 pub const NO_LIMIT: i32 = i32::MAX;
 
+/// The characters the text form adds around the type and size note: `# ` and a newline.
+/// Upstream keeps the same `+ 3` and pins it with unit tests.
+const TEXT_FORM_EXTRA_CHARS: usize = 3;
+const BYTES_PER_BASE64_GROUP: usize = 3;
+const BITS_PER_BYTE: usize = 8;
+const BITS_PER_BASE64_DIGIT: usize = 6;
+const BASE64_DIGIT_MASK: u32 = 0x3f;
+/// The shift that brings the first digit of a 24 bit group to the lowest bits.
+const FIRST_BASE64_DIGIT_SHIFT: usize =
+    BITS_PER_BYTE * BYTES_PER_BASE64_GROUP - BITS_PER_BASE64_DIGIT;
+
 fn pool() -> &'static DescriptorPool {
     static POOL: OnceLock<DescriptorPool> = OnceLock::new();
     POOL.get_or_init(|| {
@@ -51,6 +62,9 @@ fn print_text<P: Message + Name>(message: &P, single_line: bool) -> String {
 }
 
 /// Returns a debug string of the given message, suitable for logging.
+///
+/// Differs from C++ for a double field set to -0.0: prost skips it when it encodes, so
+/// the size and the text miss a field the C++ text prints as `-0`.
 pub fn protobuf_debug_string<P: Message + Name + Default>(
     message: &P,
     max_chars: i32,
@@ -63,7 +77,8 @@ pub fn protobuf_debug_string<P: Message + Name + Default>(
             && serialized.len() < max_chars
         {
             let text = print_text(message, false);
-            if text.len() + output.len() + 3 <= max_chars && text.matches('\n').count() < max_lines
+            if text.len() + output.len() + TEXT_FORM_EXTRA_CHARS <= max_chars
+                && text.matches('\n').count() < max_lines
             {
                 return format!("# {output}\n{text}");
             }
@@ -110,7 +125,11 @@ pub fn protobuf_parse_text_proto_for_flag<P: Message + Name + Default>(
 ) -> bool {
     *message_out = P::default();
     match merge_text(text, message_out) {
-        Ok(()) => true,
+        Ok(()) => {
+            // Upstream writes the error text on every call, so a success clears it.
+            error_out.clear();
+            true
+        }
         Err(error) => {
             *error_out = format!("{error}\n");
             false
@@ -138,253 +157,24 @@ fn merge_text<P: Message + Name + Default>(text: &str, proto: &mut P) -> Result<
 fn base64(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
-    for chunk in bytes.chunks(3) {
+    for chunk in bytes.chunks(BYTES_PER_BASE64_GROUP) {
         let group = chunk
             .iter()
-            .fold(0u32, |acc, byte| acc << 8 | u32::from(*byte))
-            << (8 * (3 - chunk.len()));
+            .fold(0u32, |acc, byte| acc << BITS_PER_BYTE | u32::from(*byte))
+            << (BITS_PER_BYTE * (BYTES_PER_BASE64_GROUP - chunk.len()));
         for index in 0..=chunk.len() {
             out.push(char::from(
-                ALPHABET[(group >> (18 - 6 * index) & 0x3f) as usize],
+                ALPHABET[(group >> (FIRST_BASE64_DIGIT_SHIFT - BITS_PER_BASE64_DIGIT * index)
+                    & BASE64_DIGIT_MASK) as usize],
             ));
         }
-        out.extend(std::iter::repeat_n('=', 3 - chunk.len()));
+        out.extend(std::iter::repeat_n(
+            '=',
+            BYTES_PER_BASE64_GROUP - chunk.len(),
+        ));
     }
     out
 }
 
 #[cfg(test)]
-mod tests {
-    use cpsat_proto::{
-        ConstraintProto, CpModelProto, CpObjectiveProto, CpSolverStatus, IntegerVariableProto,
-        LinearConstraintProto, SatParameters,
-    };
-    use cpsat_testutil::fixture::{self, Case};
-    use prost::Message;
-
-    use super::*;
-
-    const FIXTURE: &str = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/debug_strings.txt"
-    );
-    const PACKAGE: &str = "operations_research.sat.";
-    const STATUS_ENUM: &str = "operations_research.sat.CpSolverStatus";
-    const UNKNOWN_STATUS: i32 = 99;
-    const MIN_FIXTURE_MESSAGES: usize = 7;
-    const LIMITED_CASES: usize = 3;
-
-    /// Decodes the bytes of `$case` as the message type of its name, and evaluates
-    /// `$body` with it bound to `$message`.
-    macro_rules! with_message {
-        ($case:expr, |$message:ident| $body:expr) => {{
-            let bytes = fixture::from_hex($case.single("bytes"));
-            match $case.single("message").strip_prefix(PACKAGE).unwrap() {
-                "LinearConstraintProto" => {
-                    let $message = LinearConstraintProto::decode(bytes.as_slice()).unwrap();
-                    $body
-                }
-                "ConstraintProto" => {
-                    let $message = ConstraintProto::decode(bytes.as_slice()).unwrap();
-                    $body
-                }
-                "IntegerVariableProto" => {
-                    let $message = IntegerVariableProto::decode(bytes.as_slice()).unwrap();
-                    $body
-                }
-                "CpObjectiveProto" => {
-                    let $message = CpObjectiveProto::decode(bytes.as_slice()).unwrap();
-                    $body
-                }
-                "SatParameters" => {
-                    let $message = SatParameters::decode(bytes.as_slice()).unwrap();
-                    $body
-                }
-                "CpModelProto" => {
-                    let $message = CpModelProto::decode(bytes.as_slice()).unwrap();
-                    $body
-                }
-                other => panic!("the fixture holds a message {other} the test does not know"),
-            }
-        }};
-    }
-
-    fn empty_like<P: Default>(_: &P) -> P {
-        P::default()
-    }
-
-    fn cases() -> Vec<Case> {
-        fixture::read(FIXTURE)
-    }
-
-    fn limits_of(case: &Case) -> Vec<(i32, i32)> {
-        case.all("limits")
-            .iter()
-            .map(|pair| {
-                let (chars, lines) = pair.split_once(' ').unwrap();
-                (chars.parse().unwrap(), lines.parse().unwrap())
-            })
-            .collect()
-    }
-
-    #[test]
-    fn short_text_equals_the_text_of_the_reference() {
-        // Arrange
-        let cases = cases();
-
-        for case in &cases {
-            // Act
-            let short = with_message!(case, |message| protobuf_short_debug_string(&message));
-
-            // Assert
-            assert_eq!(short, case.single("short"), "{}", case.single("message"));
-        }
-        assert!(cases.len() >= MIN_FIXTURE_MESSAGES);
-    }
-
-    #[test]
-    fn long_text_equals_the_text_of_the_reference() {
-        // Arrange
-        let cases = cases();
-
-        for case in &cases {
-            // Act
-            let long = with_message!(case, |message| protobuf_debug_string(
-                &message, NO_LIMIT, NO_LIMIT
-            ));
-
-            // Assert
-            assert_eq!(long, case.single("long"), "{}", case.single("message"));
-        }
-    }
-
-    #[test]
-    fn limited_text_equals_the_text_of_the_reference_for_each_branch() {
-        // Arrange
-        let cases = cases();
-        let limited: Vec<&Case> = cases
-            .iter()
-            .filter(|case| !case.all("limits").is_empty())
-            .collect();
-
-        for case in &limited {
-            let limits = limits_of(case);
-            let expected = case.all("limited");
-            assert_eq!(limits.len(), expected.len());
-
-            for ((max_chars, max_lines), expected) in limits.iter().zip(expected) {
-                // Act
-                let text = with_message!(case, |message| protobuf_debug_string(
-                    &message, *max_chars, *max_lines
-                ));
-
-                // Assert
-                assert_eq!(text, expected, "limits {max_chars} {max_lines}");
-            }
-        }
-        assert_eq!(limited.len(), LIMITED_CASES);
-    }
-
-    #[test]
-    fn proto_enum_to_string_returns_the_upstream_name() {
-        // Arrange, Act
-        let name = proto_enum_to_string(STATUS_ENUM, CpSolverStatus::Optimal);
-
-        // Assert
-        assert_eq!(name, "OPTIMAL");
-    }
-
-    #[test]
-    fn proto_enum_to_string_names_an_invalid_value() {
-        // Arrange, Act
-        let name = proto_enum_to_string(STATUS_ENUM, UNKNOWN_STATUS);
-
-        // Assert
-        assert_eq!(
-            name,
-            "Invalid enum value of: 99 for enum type: CpSolverStatus"
-        );
-    }
-
-    #[test]
-    fn parse_text_proto_for_flag_fails_on_an_unknown_field_and_names_it() {
-        // Arrange
-        let mut message = CpModelProto::default();
-        let mut error = String::new();
-
-        // Act
-        let parsed = protobuf_parse_text_proto_for_flag(
-            "variables { no_such_field: 1 }",
-            &mut message,
-            &mut error,
-        );
-
-        // Assert
-        assert!(!parsed);
-        assert!(error.contains("no_such_field"), "{error}");
-    }
-
-    #[test]
-    fn parse_text_proto_for_flag_reads_back_the_long_text_of_each_fixture() {
-        // Arrange
-        let cases = cases();
-
-        for case in &cases {
-            // Act
-            let (parsed, error, original) = with_message!(case, |original| {
-                let text = protobuf_debug_string(&original, NO_LIMIT, NO_LIMIT);
-                let mut parsed = empty_like(&original);
-                let mut error = String::new();
-                let ok = protobuf_parse_text_proto_for_flag(&text, &mut parsed, &mut error);
-                (
-                    ok,
-                    error,
-                    parsed.encode_to_vec() == original.encode_to_vec(),
-                )
-            });
-
-            // Assert
-            assert!(parsed, "{error}");
-            assert!(original, "{}", case.single("message"));
-        }
-    }
-
-    #[test]
-    fn print_to_string_for_flag_parses_back_to_the_same_message() {
-        // Arrange
-        let cases = cases();
-
-        for case in &cases {
-            // Act
-            let same = with_message!(case, |original| {
-                let text = protobuf_text_format_print_to_string_for_flag(&original);
-                let mut parsed = empty_like(&original);
-                let mut error = String::new();
-                protobuf_parse_text_proto_for_flag(&text, &mut parsed, &mut error)
-                    && parsed.encode_to_vec() == original.encode_to_vec()
-            });
-
-            // Assert
-            assert!(same, "{}", case.single("message"));
-        }
-    }
-
-    #[test]
-    fn merge_from_string_adds_to_the_message_and_reports_bad_text() {
-        // Arrange
-        let mut model = CpModelProto {
-            name: "kept".to_owned(),
-            ..Default::default()
-        };
-
-        // Act
-        let merged = protobuf_text_format_merge_from_string("variables { domain: 1 }", &mut model);
-        let failed = protobuf_text_format_merge_from_string("variables {", &mut model);
-
-        // Assert
-        assert!(merged);
-        assert!(!failed);
-        assert_eq!(model.name, "kept");
-        assert_eq!(model.variables.len(), 1);
-    }
-}
+mod tests;

@@ -38,7 +38,7 @@ pub fn read(path: &str) -> Vec<Case> {
     let source =
         fs::read_to_string(path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
     let mut cases: Vec<Case> = Vec::new();
-    let mut lines = source.lines().peekable();
+    let mut lines = source.split('\n').peekable();
     while let Some(line) = lines.next() {
         if line == CASE_LINE {
             cases.push(Case {
@@ -53,7 +53,7 @@ pub fn read(path: &str) -> Vec<Case> {
                 }
                 text_lines.join("\n")
             } else {
-                value.trim_start().to_owned()
+                value.strip_prefix(' ').unwrap_or(value).to_owned()
             };
             if let Some(case) = cases.last_mut() {
                 case.entries.push((key.to_owned(), value));
@@ -97,6 +97,21 @@ mod tests {
         assert_eq!(cases.len(), 1);
         assert_eq!(cases[0].single("text"), "a {\n  b\n\n}");
         assert_eq!(cases[0].all("bytes"), ["0a", "ff"]);
+    }
+
+    #[test]
+    fn read_keeps_a_carriage_return_and_the_leading_spaces_of_a_text_line() {
+        // Arrange
+        let path =
+            std::env::temp_dir().join(format!("cpsat-fixture-cr-{}.txt", std::process::id()));
+        fs::write(&path, "case\ntext:\n|   indented\r\n| last\n").unwrap();
+
+        // Act
+        let cases = read(path.to_str().unwrap());
+        fs::remove_file(&path).unwrap();
+
+        // Assert
+        assert_eq!(cases[0].single("text"), "  indented\r\nlast");
     }
 
     #[test]

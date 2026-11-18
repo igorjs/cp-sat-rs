@@ -1,6 +1,7 @@
 # Messages for the debug string tests. The last case holds limit pairs for the three forms
 # of ProtobufDebugString (text, base64, type and size), at and just past each boundary. Two
-# earlier cases hold one pair for base64 with padding.
+# earlier cases hold one pair for base64 with padding. The last two cases hold a double of
+# -0.0 and a value that the enum of a proto2 field does not define.
 case
 message: operations_research.sat.LinearConstraintProto
 bytes: 0a020001120b02fdffffffffffffffff011a0bfbffffffffffffffff010a
@@ -59,3 +60,10 @@ limits: 123 1000
 limits: 122 1000
 limits: 5 1000
 limits: -1 1000
+limits: 100000 -1
+case
+message: operations_research.sat.CpObjectiveProto
+bytes: 110000000000000080
+case
+message: operations_research.sat.SatParameters
+bytes: 1063

@@ -43,3 +43,11 @@ reason = "checks the one line text parses back to the same message"
 [[file.added]]
 name = "merge_from_string_adds_to_the_message_and_reports_bad_text"
 reason = "checks that a merge keeps the fields it does not name and fails on bad text"
+
+[[file.added]]
+name = "parse_text_proto_for_flag_clears_the_error_of_an_earlier_call"
+reason = "checks that a successful parse empties the error string, as upstream writes it on every call"
+
+[[file.added]]
+name = "debug_string_of_a_negative_zero_double_differs_from_the_reference"
+reason = "pins the known difference: prost drops a double that is -0.0 when it encodes, so the size and text miss the field"

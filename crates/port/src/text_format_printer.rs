@@ -2,7 +2,7 @@
 //! does. `prost-reflect` prints repeated fields as lists and ends the text without a
 //! newline, so its text differs from the C++ text.
 
-use prost_reflect::{DynamicMessage, FieldDescriptor, Kind, Value};
+use prost_reflect::{DynamicMessage, FieldDescriptor, Kind, Syntax, Value};
 
 const INDENT: &str = "  ";
 const DOUBLE_PRECISIONS: [usize; 2] = [15, 17];
@@ -33,12 +33,30 @@ impl Printer {
     fn message(&mut self, message: &DynamicMessage) {
         let mut fields: Vec<(FieldDescriptor, &Value)> = message.fields().collect();
         fields.sort_by_key(|(field, _)| field.number());
+        let mut unknown = Vec::new();
         for (field, value) in fields {
-            match value {
-                Value::List(items) => items.iter().for_each(|item| self.field(&field, item)),
-                single => self.field(&field, single),
+            let items = match value {
+                Value::List(items) => items.as_slice(),
+                single => std::slice::from_ref(single),
+            };
+            for item in items {
+                match unknown_enum_number(&field, item) {
+                    Some(number) => unknown.push((field.number(), number)),
+                    None => self.field(&field, item),
+                }
             }
         }
+        for (field_number, value) in unknown {
+            self.unknown_varint(field_number, value);
+        }
+    }
+
+    fn unknown_varint(&mut self, field_number: u32, value: i32) {
+        if !self.single_line {
+            self.out.push_str(&INDENT.repeat(self.depth));
+        }
+        self.out.push_str(&format!("{field_number}: {value}"));
+        self.out.push(if self.single_line { ' ' } else { '\n' });
     }
 
     fn field(&mut self, field: &FieldDescriptor, value: &Value) {
@@ -64,6 +82,20 @@ impl Printer {
             self.out.push_str(&scalar(field, value));
             self.out.push(if self.single_line { ' ' } else { '\n' });
         }
+    }
+}
+
+/// The number of a value that the C++ parser of a proto2 file keeps as an unknown field,
+/// because the closed enum of the field has no value with that number.
+fn unknown_enum_number(field: &FieldDescriptor, value: &Value) -> Option<i32> {
+    match (field.kind(), value) {
+        (Kind::Enum(descriptor), Value::EnumNumber(number))
+            if descriptor.parent_file().syntax() == Syntax::Proto2
+                && descriptor.get_value(*number).is_none() =>
+        {
+            Some(*number)
+        }
+        _ => None,
     }
 }
 
